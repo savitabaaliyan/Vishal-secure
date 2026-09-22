@@ -40,6 +40,10 @@ public class MainActivity extends Activity {
 
     private static final int VIDEO_PICKER = 1001;
 
+    private static final String PREFS_NAME = "VishalSecureVideos";
+    private static final String KEY_VIDEO_URIS = "video_uris";
+    private static final String KEY_VIDEO_NAMES = "video_names";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -50,6 +54,8 @@ public class MainActivity extends Activity {
         );
 
         createMainScreen();
+
+        loadSavedVideos();
     }
 
     private void createMainScreen() {
@@ -221,15 +227,128 @@ public class MainActivity extends Activity {
 
         videoNames.add(name);
 
-        addVideoButton(
-                videoUris.size() - 1,
-                name
-        );
+        saveVideos();
+
+        refreshVideoList();
+    }
+
+    private void loadSavedVideos() {
+
+        android.content.SharedPreferences prefs =
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        String savedUris =
+                prefs.getString(KEY_VIDEO_URIS, "");
+
+        String savedNames =
+                prefs.getString(KEY_VIDEO_NAMES, "");
+
+        if (savedUris == null ||
+                savedUris.trim().isEmpty()) {
+            return;
+        }
+
+        String[] uriArray = savedUris.split("\\|", -1);
+        String[] nameArray = savedNames.split("\\|", -1);
+
+        for (int i = 0; i < uriArray.length; i++) {
+
+            if (uriArray[i] == null ||
+                    uriArray[i].trim().isEmpty()) {
+                continue;
+            }
+
+            try {
+
+                Uri uri = Uri.parse(uriArray[i]);
+
+                getContentResolver().takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                );
+
+                videoUris.add(uri);
+
+                String videoName;
+
+                if (i < nameArray.length &&
+                        nameArray[i] != null &&
+                        !nameArray[i].trim().isEmpty()) {
+
+                    videoName = nameArray[i];
+
+                } else {
+
+                    videoName = "Video " + videoUris.size();
+                }
+
+                videoNames.add(videoName);
+
+            } catch (Exception ignored) {
+            }
+        }
+
+        refreshVideoList();
+    }
+
+    private void saveVideos() {
+
+        StringBuilder uriBuilder = new StringBuilder();
+        StringBuilder nameBuilder = new StringBuilder();
+
+        for (int i = 0; i < videoUris.size(); i++) {
+
+            if (i > 0) {
+                uriBuilder.append("|");
+                nameBuilder.append("|");
+            }
+
+            uriBuilder.append(
+                    Uri.encode(videoUris.get(i).toString())
+            );
+
+            nameBuilder.append(
+                    Uri.encode(videoNames.get(i))
+            );
+        }
+
+        getSharedPreferences(
+                PREFS_NAME,
+                MODE_PRIVATE
+        )
+                .edit()
+                .putString(
+                        KEY_VIDEO_URIS,
+                        uriBuilder.toString()
+                )
+                .putString(
+                        KEY_VIDEO_NAMES,
+                        nameBuilder.toString()
+                )
+                .apply();
+    }
+
+    private void refreshVideoList() {
+
+        videoList.removeAllViews();
+
+        for (int i = 0; i < videoUris.size(); i++) {
+
+            addVideoButton(
+                    i,
+                    videoNames.get(i)
+            );
+        }
     }
 
     private void addVideoButton(
             final int index,
             String name) {
+
+        LinearLayout row = new LinearLayout(this);
+
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
 
         Button videoButton = new Button(this);
 
@@ -241,8 +360,30 @@ public class MainActivity extends Activity {
 
         videoButton.setGravity(Gravity.CENTER_VERTICAL);
 
-        videoList.addView(
+        row.addView(
                 videoButton,
+                new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1
+                )
+        );
+
+        Button deleteButton = new Button(this);
+
+        deleteButton.setText("DELETE");
+        deleteButton.setTextSize(13);
+
+        row.addView(
+                deleteButton,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        videoList.addView(
+                row,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
@@ -257,6 +398,38 @@ public class MainActivity extends Activity {
                 playVideo(videoUris.get(index));
             }
         });
+
+        deleteButton.setOnClickListener(v -> {
+
+            deleteVideo(index);
+        });
+    }
+
+    private void deleteVideo(int index) {
+
+        if (index < 0 ||
+                index >= videoUris.size()) {
+            return;
+        }
+
+        Uri uri = videoUris.get(index);
+
+        try {
+
+            getContentResolver().releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+            );
+
+        } catch (Exception ignored) {
+        }
+
+        videoUris.remove(index);
+        videoNames.remove(index);
+
+        saveVideos();
+
+        refreshVideoList();
     }
 
     private void playVideo(Uri uri) {
