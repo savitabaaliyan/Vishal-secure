@@ -24,6 +24,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Screenshot और screen capture को रोकने के लिए
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -59,9 +60,9 @@ public class MainActivity extends Activity {
         mobile.setSingleLine(true);
         layout.addView(mobile);
 
-        Button selectVideo = new Button(this);
-        selectVideo.setText("Select Secure Video");
-        layout.addView(selectVideo);
+        Button openContent = new Button(this);
+        openContent.setText("OPEN SECURE CONTENT");
+        layout.addView(openContent);
 
         TextView expiry = new TextView(this);
         expiry.setText("Expiry: अभी निर्धारित नहीं");
@@ -83,10 +84,19 @@ public class MainActivity extends Activity {
         videoView.setMediaController(controller);
         controller.setAnchorView(videoView);
 
-        selectVideo.setOnClickListener(v -> {
+        // OPEN SECURE CONTENT button
+        openContent.setOnClickListener(v -> {
+
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+
             intent.setType("video/*");
+
             intent.addCategory(Intent.CATEGORY_OPENABLE);
+
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+
             startActivityForResult(intent, VIDEO_PICKER);
         });
 
@@ -99,7 +109,11 @@ public class MainActivity extends Activity {
             int resultCode,
             Intent data) {
 
-        super.onActivityResult(requestCode, resultCode, data);
+        super.onActivityResult(
+                requestCode,
+                resultCode,
+                data
+        );
 
         if (requestCode == VIDEO_PICKER &&
                 resultCode == RESULT_OK &&
@@ -108,6 +122,15 @@ public class MainActivity extends Activity {
             Uri videoUri = data.getData();
 
             if (videoUri != null) {
+
+                try {
+                    getContentResolver().takePersistableUriPermission(
+                            videoUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    );
+                } catch (Exception ignored) {
+                }
+
                 videoView.setVideoURI(videoUri);
                 videoView.start();
             }
