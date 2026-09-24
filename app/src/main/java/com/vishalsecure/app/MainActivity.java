@@ -151,6 +151,19 @@ public class MainActivity extends Activity {
         videoView.setOnCompletionListener(mp -> {
             exitVideoMode();
         });
+        // Video playback error
+videoView.setOnErrorListener((mp, what, extra) -> {
+
+    exitVideoMode();
+
+    new android.app.AlertDialog.Builder(this)
+            .setTitle("Vishal Secure")
+            .setMessage("Video play error: " + what + " / " + extra)
+            .setPositiveButton("OK", null)
+            .show();
+
+    return true;
+});
 
         // Open video picker
         openContent.setOnClickListener(v -> openVideoPicker());
