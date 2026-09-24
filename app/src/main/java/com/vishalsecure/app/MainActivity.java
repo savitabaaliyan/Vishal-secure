@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Screenshot / screen recording protection
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -109,6 +110,7 @@ public class MainActivity extends Activity {
         videoList.setOrientation(LinearLayout.VERTICAL);
         mainLayout.addView(videoList);
 
+        // Video container
         videoContainer = new FrameLayout(this);
         videoContainer.setBackgroundColor(Color.BLACK);
         videoContainer.setVisibility(View.GONE);
@@ -125,6 +127,7 @@ public class MainActivity extends Activity {
 
         videoContainer.addView(videoView, videoParams);
 
+        // Media controls
         controller = new MediaController(this);
         videoView.setMediaController(controller);
         controller.setAnchorView(videoView);
@@ -138,15 +141,18 @@ public class MainActivity extends Activity {
                 )
         );
 
+        // Video prepared
         videoView.setOnPreparedListener(mp -> {
             enterVideoMode();
             videoView.start();
         });
 
+        // Video completed
         videoView.setOnCompletionListener(mp -> {
             exitVideoMode();
         });
 
+        // Open video picker
         openContent.setOnClickListener(v -> openVideoPicker());
 
         setContentView(mainLayout);
@@ -160,8 +166,10 @@ public class MainActivity extends Activity {
 
         intent.addCategory(Intent.CATEGORY_OPENABLE);
 
+        // Multiple videos select करने की अनुमति
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
 
+        // Persistent read permission
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
 
@@ -182,6 +190,7 @@ public class MainActivity extends Activity {
             return;
         }
 
+        // Multiple videos
         if (data.getClipData() != null) {
 
             ClipData clipData = data.getClipData();
@@ -193,7 +202,10 @@ public class MainActivity extends Activity {
                 addVideo(uri);
             }
 
-        } else if (data.getData() != null) {
+        }
+
+        // Single video
+        else if (data.getData() != null) {
 
             addVideo(data.getData());
         }
@@ -209,23 +221,28 @@ public class MainActivity extends Activity {
             return;
         }
 
+        // Permanent permission लेने की कोशिश
         try {
+
             getContentResolver().takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
             );
+
         } catch (Exception ignored) {
         }
 
         videoUris.add(uri);
 
-        String name = uri.getLastPathSegment();
+        String videoName = uri.getLastPathSegment();
 
-        if (name == null || name.trim().isEmpty()) {
-            name = "Video " + videoUris.size();
+        if (videoName == null ||
+                videoName.trim().isEmpty()) {
+
+            videoName = "Video " + videoUris.size();
         }
 
-        videoNames.add(name);
+        videoNames.add(videoName);
 
         saveVideos();
 
@@ -235,7 +252,10 @@ public class MainActivity extends Activity {
     private void loadSavedVideos() {
 
         android.content.SharedPreferences prefs =
-                getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                getSharedPreferences(
+                        PREFS_NAME,
+                        MODE_PRIVATE
+                );
 
         String savedUris =
                 prefs.getString(KEY_VIDEO_URIS, "");
@@ -245,27 +265,49 @@ public class MainActivity extends Activity {
 
         if (savedUris == null ||
                 savedUris.trim().isEmpty()) {
+
             return;
         }
 
-        String[] uriArray = savedUris.split("\\|", -1);
-        String[] nameArray = savedNames.split("\\|", -1);
+        String[] uriArray =
+                savedUris.split("\\|", -1);
+
+        String[] nameArray =
+                savedNames.split("\\|", -1);
 
         for (int i = 0; i < uriArray.length; i++) {
 
             if (uriArray[i] == null ||
                     uriArray[i].trim().isEmpty()) {
+
                 continue;
             }
 
             try {
 
-                Uri uri = Uri.parse(uriArray[i]);
+                /*
+                 * IMPORTANT:
+                 * saveVideos() में URI encode हुई है।
+                 * इसलिए load करते समय decode करना जरूरी है।
+                 */
+                Uri uri =
+                        Uri.parse(
+                                Uri.decode(uriArray[i])
+                        );
 
-                getContentResolver().takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                );
+                /*
+                 * Saved URI की read permission दोबारा लेने की कोशिश।
+                 */
+                try {
+
+                    getContentResolver()
+                            .takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            );
+
+                } catch (Exception ignored) {
+                }
 
                 videoUris.add(uri);
 
@@ -275,11 +317,17 @@ public class MainActivity extends Activity {
                         nameArray[i] != null &&
                         !nameArray[i].trim().isEmpty()) {
 
-                    videoName = nameArray[i];
+                    /*
+                     * Video name भी encode हुआ है,
+                     * इसलिए decode करना जरूरी है।
+                     */
+                    videoName =
+                            Uri.decode(nameArray[i]);
 
                 } else {
 
-                    videoName = "Video " + videoUris.size();
+                    videoName =
+                            "Video " + videoUris.size();
                 }
 
                 videoNames.add(videoName);
@@ -293,22 +341,38 @@ public class MainActivity extends Activity {
 
     private void saveVideos() {
 
-        StringBuilder uriBuilder = new StringBuilder();
-        StringBuilder nameBuilder = new StringBuilder();
+        StringBuilder uriBuilder =
+                new StringBuilder();
 
-        for (int i = 0; i < videoUris.size(); i++) {
+        StringBuilder nameBuilder =
+                new StringBuilder();
+
+        for (int i = 0;
+                i < videoUris.size();
+                i++) {
 
             if (i > 0) {
+
                 uriBuilder.append("|");
                 nameBuilder.append("|");
             }
 
+            /*
+             * URI को encode करके save कर रहे हैं।
+             */
             uriBuilder.append(
-                    Uri.encode(videoUris.get(i).toString())
+                    Uri.encode(
+                            videoUris.get(i).toString()
+                    )
             );
 
+            /*
+             * Video name को भी encode कर रहे हैं।
+             */
             nameBuilder.append(
-                    Uri.encode(videoNames.get(i))
+                    Uri.encode(
+                            videoNames.get(i)
+                    )
             );
         }
 
@@ -332,7 +396,9 @@ public class MainActivity extends Activity {
 
         videoList.removeAllViews();
 
-        for (int i = 0; i < videoUris.size(); i++) {
+        for (int i = 0;
+                i < videoUris.size();
+                i++) {
 
             addVideoButton(
                     i,
@@ -345,20 +411,33 @@ public class MainActivity extends Activity {
             final int index,
             String name) {
 
-        LinearLayout row = new LinearLayout(this);
+        LinearLayout row =
+                new LinearLayout(this);
 
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
 
-        Button videoButton = new Button(this);
+        row.setGravity(
+                Gravity.CENTER_VERTICAL
+        );
+
+        // Play button
+        Button videoButton =
+                new Button(this);
 
         videoButton.setText(
-                "▶  " + (index + 1) + ". " + name
+                "▶  " +
+                        (index + 1) +
+                        ". " +
+                        name
         );
 
         videoButton.setTextSize(16);
 
-        videoButton.setGravity(Gravity.CENTER_VERTICAL);
+        videoButton.setGravity(
+                Gravity.CENTER_VERTICAL
+        );
 
         row.addView(
                 videoButton,
@@ -369,7 +448,9 @@ public class MainActivity extends Activity {
                 )
         );
 
-        Button deleteButton = new Button(this);
+        // Delete button
+        Button deleteButton =
+                new Button(this);
 
         deleteButton.setText("DELETE");
         deleteButton.setTextSize(13);
@@ -390,15 +471,19 @@ public class MainActivity extends Activity {
                 )
         );
 
+        // Play
         videoButton.setOnClickListener(v -> {
 
             if (index >= 0 &&
                     index < videoUris.size()) {
 
-                playVideo(videoUris.get(index));
+                playVideo(
+                        videoUris.get(index)
+                );
             }
         });
 
+        // Delete
         deleteButton.setOnClickListener(v -> {
 
             deleteVideo(index);
@@ -409,22 +494,27 @@ public class MainActivity extends Activity {
 
         if (index < 0 ||
                 index >= videoUris.size()) {
+
             return;
         }
 
-        Uri uri = videoUris.get(index);
+        Uri uri =
+                videoUris.get(index);
 
+        // Persistent permission release
         try {
 
-            getContentResolver().releasePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-            );
+            getContentResolver()
+                    .releasePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    );
 
         } catch (Exception ignored) {
         }
 
         videoUris.remove(index);
+
         videoNames.remove(index);
 
         saveVideos();
@@ -434,9 +524,25 @@ public class MainActivity extends Activity {
 
     private void playVideo(Uri uri) {
 
-        videoView.stopPlayback();
+        if (uri == null) {
+            return;
+        }
 
-        videoView.setVideoURI(uri);
+        try {
+
+            videoView.stopPlayback();
+
+            /*
+             * यही actual saved URI है।
+             * loadSavedVideos() में इसे decode करके
+             * सही Uri बनाया गया है।
+             */
+            videoView.setVideoURI(uri);
+
+        } catch (Exception e) {
+
+            exitVideoMode();
+        }
     }
 
     private void enterVideoMode() {
@@ -451,16 +557,23 @@ public class MainActivity extends Activity {
 
         videoContainer.setVisibility(View.VISIBLE);
 
-        mainLayout.setPadding(0, 0, 0, 0);
-
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        mainLayout.setPadding(
+                0,
+                0,
+                0,
+                0
         );
+
+        getWindow()
+                .getDecorView()
+                .setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                );
 
         videoContainer.requestLayout();
         videoView.requestLayout();
@@ -478,9 +591,16 @@ public class MainActivity extends Activity {
 
         videoContainer.setVisibility(View.GONE);
 
-        mainLayout.setPadding(35, 40, 35, 35);
+        mainLayout.setPadding(
+                35,
+                40,
+                35,
+                35
+        );
 
-        getWindow().getDecorView().setSystemUiVisibility(0);
+        getWindow()
+                .getDecorView()
+                .setSystemUiVisibility(0);
     }
 
     @Override
