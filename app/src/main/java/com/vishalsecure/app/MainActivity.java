@@ -143,27 +143,38 @@ public class MainActivity extends Activity {
 
         // Video prepared
         videoView.setOnPreparedListener(mp -> {
-            enterVideoMode();
+
+            // VideoView को focus दें
+            videoView.requestFocus();
+
+            // Video तैयार होने के बाद play करें
             videoView.start();
         });
 
         // Video completed
         videoView.setOnCompletionListener(mp -> {
+
             exitVideoMode();
         });
+
         // Video playback error
-videoView.setOnErrorListener((mp, what, extra) -> {
+        videoView.setOnErrorListener((mp, what, extra) -> {
 
-    exitVideoMode();
+            exitVideoMode();
 
-    new android.app.AlertDialog.Builder(this)
-            .setTitle("Vishal Secure")
-            .setMessage("Video play error: " + what + " / " + extra)
-            .setPositiveButton("OK", null)
-            .show();
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Vishal Secure")
+                    .setMessage(
+                            "Video play error: "
+                                    + what
+                                    + " / "
+                                    + extra
+                    )
+                    .setPositiveButton("OK", null)
+                    .show();
 
-    return true;
-});
+            return true;
+        });
 
         // Open video picker
         openContent.setOnClickListener(v -> openVideoPicker());
@@ -200,6 +211,7 @@ videoView.setOnErrorListener((mp, what, extra) -> {
         if (requestCode != VIDEO_PICKER ||
                 resultCode != RESULT_OK ||
                 data == null) {
+
             return;
         }
 
@@ -208,13 +220,15 @@ videoView.setOnErrorListener((mp, what, extra) -> {
 
             ClipData clipData = data.getClipData();
 
-            for (int i = 0; i < clipData.getItemCount(); i++) {
+            for (int i = 0;
+                    i < clipData.getItemCount();
+                    i++) {
 
-                Uri uri = clipData.getItemAt(i).getUri();
+                Uri uri =
+                        clipData.getItemAt(i).getUri();
 
                 addVideo(uri);
             }
-
         }
 
         // Single video
@@ -247,12 +261,14 @@ videoView.setOnErrorListener((mp, what, extra) -> {
 
         videoUris.add(uri);
 
-        String videoName = uri.getLastPathSegment();
+        String videoName =
+                uri.getLastPathSegment();
 
         if (videoName == null ||
                 videoName.trim().isEmpty()) {
 
-            videoName = "Video " + videoUris.size();
+            videoName =
+                    "Video " + videoUris.size();
         }
 
         videoNames.add(videoName);
@@ -271,10 +287,16 @@ videoView.setOnErrorListener((mp, what, extra) -> {
                 );
 
         String savedUris =
-                prefs.getString(KEY_VIDEO_URIS, "");
+                prefs.getString(
+                        KEY_VIDEO_URIS,
+                        ""
+                );
 
         String savedNames =
-                prefs.getString(KEY_VIDEO_NAMES, "");
+                prefs.getString(
+                        KEY_VIDEO_NAMES,
+                        ""
+                );
 
         if (savedUris == null ||
                 savedUris.trim().isEmpty()) {
@@ -288,7 +310,9 @@ videoView.setOnErrorListener((mp, what, extra) -> {
         String[] nameArray =
                 savedNames.split("\\|", -1);
 
-        for (int i = 0; i < uriArray.length; i++) {
+        for (int i = 0;
+                i < uriArray.length;
+                i++) {
 
             if (uriArray[i] == null ||
                     uriArray[i].trim().isEmpty()) {
@@ -299,7 +323,6 @@ videoView.setOnErrorListener((mp, what, extra) -> {
             try {
 
                 /*
-                 * IMPORTANT:
                  * saveVideos() में URI encode हुई है।
                  * इसलिए load करते समय decode करना जरूरी है।
                  */
@@ -440,10 +463,10 @@ videoView.setOnErrorListener((mp, what, extra) -> {
                 new Button(this);
 
         videoButton.setText(
-                "▶  " +
-                        (index + 1) +
-                        ". " +
-                        name
+                "▶  "
+                        + (index + 1)
+                        + ". "
+                        + name
         );
 
         videoButton.setTextSize(16);
@@ -535,6 +558,12 @@ videoView.setOnErrorListener((mp, what, extra) -> {
         refreshVideoList();
     }
 
+    /*
+     * =========================================================
+     * VIDEO PLAYBACK
+     * =========================================================
+     */
+
     private void playVideo(Uri uri) {
 
         if (uri == null) {
@@ -543,18 +572,32 @@ videoView.setOnErrorListener((mp, what, extra) -> {
 
         try {
 
+            // पुराना playback पूरी तरह बंद करें
             videoView.stopPlayback();
 
+            // पहले video screen दिखाएँ
+            enterVideoMode();
+
             /*
-             * यही actual saved URI है।
-             * loadSavedVideos() में इसे decode करके
-             * सही Uri बनाया गया है।
+             * Saved content URI को VideoView में दें।
              */
             videoView.setVideoURI(uri);
+
+            // VideoView को focus दें
+            videoView.requestFocus();
 
         } catch (Exception e) {
 
             exitVideoMode();
+
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Vishal Secure")
+                    .setMessage(
+                            "Video open नहीं हो सकी.\n\n"
+                                    + e.getMessage()
+                    )
+                    .setPositiveButton("OK", null)
+                    .show();
         }
     }
 
