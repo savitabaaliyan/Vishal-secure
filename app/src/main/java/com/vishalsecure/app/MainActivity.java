@@ -702,3 +702,5 @@ public class MainActivity extends Activity {
     private void refreshVideoList() {
 
         if (videoListLayout == null)
+            
+}
