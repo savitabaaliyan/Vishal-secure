@@ -9,6 +9,10 @@
         android:label="Vishal Secure"
         android:supportsRtl="true"
         android:theme="@style/Theme.VishalSecure">
+        <activity
+    android:name=".VideoPlayerActivity"
+    android:screenOrientation="landscape"
+    android:exported="false" />
 
         <activity
             android:name=".MainActivity"
