@@ -1,9 +1,12 @@
 package com.vishalsecure.app;
 
 import android.app.Activity;
+import android.app.DatePickerDialog;
+import android.app.TimePickerDialog;
 import android.os.Bundle;
 import android.content.Intent;
 import android.content.ClipData;
+import android.content.Context;
 import android.net.Uri;
 import android.graphics.Color;
 import android.view.Gravity;
@@ -16,8 +19,13 @@ import android.widget.EditText;
 import android.widget.Button;
 import android.widget.VideoView;
 import android.widget.MediaController;
+import android.widget.Toast;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
 
@@ -29,6 +37,7 @@ public class MainActivity extends Activity {
     private EditText name;
     private EditText mobile;
     private Button openContent;
+    private Button setExpiryButton;
     private TextView expiry;
 
     private FrameLayout videoContainer;
@@ -44,6 +53,16 @@ public class MainActivity extends Activity {
     private static final String KEY_VIDEO_URIS = "video_uris";
     private static final String KEY_VIDEO_NAMES = "video_names";
 
+    // Expiry
+    private static final String KEY_EXPIRY_TIME = "expiry_time";
+    private long expiryTime = 0;
+
+    private final SimpleDateFormat expiryFormat =
+            new SimpleDateFormat(
+                    "dd-MM-yyyy HH:mm",
+                    Locale.getDefault()
+            );
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,9 +73,13 @@ public class MainActivity extends Activity {
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
+        loadExpiry();
+
         createMainScreen();
 
         loadSavedVideos();
+
+        updateExpiryText();
     }
 
     private void createMainScreen() {
@@ -93,6 +116,11 @@ public class MainActivity extends Activity {
         openContent = new Button(this);
         openContent.setText("OPEN SECURE CONTENT");
         mainLayout.addView(openContent);
+
+        // SET EXPIRY button
+        setExpiryButton = new Button(this);
+        setExpiryButton.setText("SET EXPIRY");
+        mainLayout.addView(setExpiryButton);
 
         expiry = new TextView(this);
         expiry.setText("Expiry: अभी निर्धारित नहीं");
@@ -179,25 +207,222 @@ public class MainActivity extends Activity {
         // Open video picker
         openContent.setOnClickListener(v -> openVideoPicker());
 
+        // Set expiry
+        setExpiryButton.setOnClickListener(v -> showExpiryPicker());
+
         setContentView(mainLayout);
     }
 
+    /*
+     * =========================================================
+     * EXPIRY TIMER
+     * =========================================================
+     */
+
+    private void showExpiryPicker() {
+
+        final Calendar calendar = Calendar.getInstance();
+
+        DatePickerDialog datePickerDialog =
+                new DatePickerDialog(
+                        this,
+                        (view, year, month, dayOfMonth) -> {
+
+                            final Calendar selected =
+                                    Calendar.getInstance();
+
+                            selected.set(
+                                    Calendar.YEAR,
+                                    year
+                            );
+
+                            selected.set(
+                                    Calendar.MONTH,
+                                    month
+                            );
+
+                            selected.set(
+                                    Calendar.DAY_OF_MONTH,
+                                    dayOfMonth
+                            );
+
+                            TimePickerDialog timePickerDialog =
+                                    new TimePickerDialog(
+                                            this,
+                                            (timeView, hourOfDay, minute) -> {
+
+                                                selected.set(
+                                                        Calendar.HOUR_OF_DAY,
+                                                        hourOfDay
+                                                );
+
+                                                selected.set(
+                                                        Calendar.MINUTE,
+                                                        minute
+                                                );
+
+                                                selected.set(
+                                                        Calendar.SECOND,
+                                                        0
+                                                );
+
+                                                selected.set(
+                                                        Calendar.MILLISECOND,
+                                                        0
+                                                );
+
+                                                expiryTime =
+                                                        selected.getTimeInMillis();
+
+                                                saveExpiry();
+
+                                                updateExpiryText();
+
+                                                Toast.makeText(
+                                                        this,
+                                                        "Expiry समय निर्धारित हो गया",
+                                                        Toast.LENGTH_SHORT
+                                                ).show();
+
+                                            },
+                                            calendar.get(
+                                                    Calendar.HOUR_OF_DAY
+                                            ),
+                                            calendar.get(
+                                                    Calendar.MINUTE
+                                            ),
+                                            true
+                                    );
+
+                            timePickerDialog.show();
+
+                        },
+                        calendar.get(Calendar.YEAR),
+                        calendar.get(Calendar.MONTH),
+                        calendar.get(Calendar.DAY_OF_MONTH)
+                );
+
+        datePickerDialog.show();
+    }
+
+    private void saveExpiry() {
+
+        getSharedPreferences(
+                PREFS_NAME,
+                MODE_PRIVATE
+        )
+                .edit()
+                .putLong(
+                        KEY_EXPIRY_TIME,
+                        expiryTime
+                )
+                .apply();
+    }
+
+    private void loadExpiry() {
+
+        expiryTime =
+                getSharedPreferences(
+                        PREFS_NAME,
+                        MODE_PRIVATE
+                )
+                        .getLong(
+                                KEY_EXPIRY_TIME,
+                                0
+                        );
+    }
+
+    private boolean isExpired() {
+
+        if (expiryTime <= 0) {
+            return false;
+        }
+
+        return System.currentTimeMillis() >= expiryTime;
+    }
+
+    private void updateExpiryText() {
+
+        if (expiry == null) {
+            return;
+        }
+
+        if (expiryTime <= 0) {
+
+            expiry.setText(
+                    "Expiry: अभी निर्धारित नहीं"
+            );
+
+            return;
+        }
+
+        String formatted =
+                expiryFormat.format(
+                        new Date(expiryTime)
+                );
+
+        if (isExpired()) {
+
+            expiry.setText(
+                    "Expiry: EXPIRED\n"
+                            + formatted
+            );
+
+            expiry.setTextColor(
+                    Color.RED
+            );
+
+        } else {
+
+            expiry.setText(
+                    "Expiry: "
+                            + formatted
+            );
+
+            expiry.setTextColor(
+                    Color.DKGRAY
+            );
+        }
+    }
+
+    /*
+     * =========================================================
+     * VIDEO PICKER
+     * =========================================================
+     */
+
     private void openVideoPicker() {
 
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        Intent intent =
+                new Intent(
+                        Intent.ACTION_OPEN_DOCUMENT
+                );
 
         intent.setType("video/*");
 
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.addCategory(
+                Intent.CATEGORY_OPENABLE
+        );
 
         // Multiple videos select करने की अनुमति
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        intent.putExtra(
+                Intent.EXTRA_ALLOW_MULTIPLE,
+                true
+        );
 
         // Persistent read permission
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        intent.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+        );
 
-        startActivityForResult(intent, VIDEO_PICKER);
+        intent.addFlags(
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        );
+
+        startActivityForResult(
+                intent,
+                VIDEO_PICKER
+        );
     }
 
     @Override
@@ -206,7 +431,11 @@ public class MainActivity extends Activity {
             int resultCode,
             Intent data) {
 
-        super.onActivityResult(requestCode, resultCode, data);
+        super.onActivityResult(
+                requestCode,
+                resultCode,
+                data
+        );
 
         if (requestCode != VIDEO_PICKER ||
                 resultCode != RESULT_OK ||
@@ -218,7 +447,8 @@ public class MainActivity extends Activity {
         // Multiple videos
         if (data.getClipData() != null) {
 
-            ClipData clipData = data.getClipData();
+            ClipData clipData =
+                    data.getClipData();
 
             for (int i = 0;
                     i < clipData.getItemCount();
@@ -234,7 +464,9 @@ public class MainActivity extends Activity {
         // Single video
         else if (data.getData() != null) {
 
-            addVideo(data.getData());
+            addVideo(
+                    data.getData()
+            );
         }
     }
 
@@ -251,10 +483,11 @@ public class MainActivity extends Activity {
         // Permanent permission लेने की कोशिश
         try {
 
-            getContentResolver().takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-            );
+            getContentResolver()
+                    .takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    );
 
         } catch (Exception ignored) {
         }
@@ -322,18 +555,13 @@ public class MainActivity extends Activity {
 
             try {
 
-                /*
-                 * saveVideos() में URI encode हुई है।
-                 * इसलिए load करते समय decode करना जरूरी है।
-                 */
                 Uri uri =
                         Uri.parse(
-                                Uri.decode(uriArray[i])
+                                Uri.decode(
+                                        uriArray[i]
+                                )
                         );
 
-                /*
-                 * Saved URI की read permission दोबारा लेने की कोशिश।
-                 */
                 try {
 
                     getContentResolver()
@@ -353,20 +581,21 @@ public class MainActivity extends Activity {
                         nameArray[i] != null &&
                         !nameArray[i].trim().isEmpty()) {
 
-                    /*
-                     * Video name भी encode हुआ है,
-                     * इसलिए decode करना जरूरी है।
-                     */
                     videoName =
-                            Uri.decode(nameArray[i]);
+                            Uri.decode(
+                                    nameArray[i]
+                            );
 
                 } else {
 
                     videoName =
-                            "Video " + videoUris.size();
+                            "Video "
+                                    + videoUris.size();
                 }
 
-                videoNames.add(videoName);
+                videoNames.add(
+                        videoName
+                );
 
             } catch (Exception ignored) {
             }
@@ -393,18 +622,12 @@ public class MainActivity extends Activity {
                 nameBuilder.append("|");
             }
 
-            /*
-             * URI को encode करके save कर रहे हैं।
-             */
             uriBuilder.append(
                     Uri.encode(
                             videoUris.get(i).toString()
                     )
             );
 
-            /*
-             * Video name को भी encode कर रहे हैं।
-             */
             nameBuilder.append(
                     Uri.encode(
                             videoNames.get(i)
@@ -488,7 +711,10 @@ public class MainActivity extends Activity {
         Button deleteButton =
                 new Button(this);
 
-        deleteButton.setText("DELETE");
+        deleteButton.setText(
+                "DELETE"
+        );
+
         deleteButton.setTextSize(13);
 
         row.addView(
@@ -512,6 +738,22 @@ public class MainActivity extends Activity {
 
             if (index >= 0 &&
                     index < videoUris.size()) {
+
+                /*
+                 * Expiry check
+                 */
+                if (isExpired()) {
+
+                    Toast.makeText(
+                            this,
+                            "Content Expired",
+                            Toast.LENGTH_LONG
+                    ).show();
+
+                    updateExpiryText();
+
+                    return;
+                }
 
                 playVideo(
                         videoUris.get(index)
@@ -570,6 +812,22 @@ public class MainActivity extends Activity {
             return;
         }
 
+        /*
+         * Expiry को दोबारा check करें।
+         */
+        if (isExpired()) {
+
+            Toast.makeText(
+                    this,
+                    "Content Expired",
+                    Toast.LENGTH_LONG
+            ).show();
+
+            updateExpiryText();
+
+            return;
+        }
+
         try {
 
             // पुराना playback पूरी तरह बंद करें
@@ -591,12 +849,17 @@ public class MainActivity extends Activity {
             exitVideoMode();
 
             new android.app.AlertDialog.Builder(this)
-                    .setTitle("Vishal Secure")
+                    .setTitle(
+                            "Vishal Secure"
+                    )
                     .setMessage(
                             "Video open नहीं हो सकी.\n\n"
                                     + e.getMessage()
                     )
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton(
+                            "OK",
+                            null
+                    )
                     .show();
         }
     }
@@ -608,10 +871,13 @@ public class MainActivity extends Activity {
         name.setVisibility(View.GONE);
         mobile.setVisibility(View.GONE);
         openContent.setVisibility(View.GONE);
+        setExpiryButton.setVisibility(View.GONE);
         expiry.setVisibility(View.GONE);
         videoList.setVisibility(View.GONE);
 
-        videoContainer.setVisibility(View.VISIBLE);
+        videoContainer.setVisibility(
+                View.VISIBLE
+        );
 
         mainLayout.setPadding(
                 0,
@@ -637,15 +903,41 @@ public class MainActivity extends Activity {
 
     private void exitVideoMode() {
 
-        title.setVisibility(View.VISIBLE);
-        subtitle.setVisibility(View.VISIBLE);
-        name.setVisibility(View.VISIBLE);
-        mobile.setVisibility(View.VISIBLE);
-        openContent.setVisibility(View.VISIBLE);
-        expiry.setVisibility(View.VISIBLE);
-        videoList.setVisibility(View.VISIBLE);
+        title.setVisibility(
+                View.VISIBLE
+        );
 
-        videoContainer.setVisibility(View.GONE);
+        subtitle.setVisibility(
+                View.VISIBLE
+        );
+
+        name.setVisibility(
+                View.VISIBLE
+        );
+
+        mobile.setVisibility(
+                View.VISIBLE
+        );
+
+        openContent.setVisibility(
+                View.VISIBLE
+        );
+
+        setExpiryButton.setVisibility(
+                View.VISIBLE
+        );
+
+        expiry.setVisibility(
+                View.VISIBLE
+        );
+
+        videoList.setVisibility(
+                View.VISIBLE
+        );
+
+        videoContainer.setVisibility(
+                View.GONE
+        );
 
         mainLayout.setPadding(
                 35,
@@ -657,19 +949,25 @@ public class MainActivity extends Activity {
         getWindow()
                 .getDecorView()
                 .setSystemUiVisibility(0);
+
+        updateExpiryText();
     }
 
     @Override
     public void onConfigurationChanged(
             android.content.res.Configuration newConfig) {
 
-        super.onConfigurationChanged(newConfig);
+        super.onConfigurationChanged(
+                newConfig
+        );
 
         if (videoView != null &&
                 videoView.isPlaying()) {
 
             videoContainer.post(() -> {
+
                 enterVideoMode();
+
             });
         }
     }
