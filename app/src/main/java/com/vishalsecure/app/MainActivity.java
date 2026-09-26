@@ -9,19 +9,22 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.SurfaceTexture;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.MediaController;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.VideoView;
+
+import android.media.MediaPlayer;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -58,14 +61,21 @@ public class MainActivity extends Activity {
     private TextView titleText;
     private TextView subtitleText;
 
-    private VideoView videoView;
-    private MediaController mediaController;
+    // ============================================================
+    // VIDEO ENGINE
+    // ============================================================
+
+    private TextureView textureView;
+    private MediaPlayer mediaPlayer;
+    private Surface videoSurface;
+
+    private Uri pendingVideoUri;
+
+    private boolean videoMode = false;
 
     private SharedPreferences preferences;
 
     private long expiryTime = 0L;
-
-    private boolean videoMode = false;
 
     private final ArrayList<String> videoUris =
             new ArrayList<>();
@@ -105,7 +115,6 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private int dp(int value) {
-
         return (int) (
                 value *
                         getResources()
@@ -117,7 +126,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // TEXT VIEW HELPER
+    // TEXT VIEW
     // ============================================================
 
     private TextView makeText(
@@ -162,9 +171,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // CONTENT LAYOUT
-        // --------------------------------------------------------
+        // ========================================================
 
         contentLayout =
                 new LinearLayout(this);
@@ -186,9 +195,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // TITLE
-        // --------------------------------------------------------
+        // ========================================================
 
         titleText =
                 makeText(
@@ -215,9 +224,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // SUBTITLE
-        // --------------------------------------------------------
+        // ========================================================
 
         subtitleText =
                 makeText(
@@ -249,9 +258,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // RECEIVER NAME
-        // --------------------------------------------------------
+        // ========================================================
 
         receiverName =
                 new EditText(this);
@@ -273,9 +282,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // RECEIVER MOBILE
-        // --------------------------------------------------------
+        // ========================================================
 
         receiverMobile =
                 new EditText(this);
@@ -311,9 +320,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // OPEN SECURE CONTENT
-        // --------------------------------------------------------
+        // ========================================================
 
         openContentButton =
                 new Button(this);
@@ -351,9 +360,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // SET EXPIRY
-        // --------------------------------------------------------
+        // ========================================================
 
         setExpiryButton =
                 new Button(this);
@@ -385,9 +394,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // EXPIRY TEXT
-        // --------------------------------------------------------
+        // ========================================================
 
         expiryText =
                 makeText(
@@ -421,9 +430,9 @@ public class MainActivity extends Activity {
         updateExpiryText();
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // SECURE VIDEOS TITLE
-        // --------------------------------------------------------
+        // ========================================================
 
         TextView listTitle =
                 makeText(
@@ -446,9 +455,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // VIDEO LIST
-        // --------------------------------------------------------
+        // ========================================================
 
         videoListLayout =
                 new LinearLayout(this);
@@ -477,9 +486,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
+        // ========================================================
         // VIDEO CONTAINER
-        // --------------------------------------------------------
+        // ========================================================
 
         videoContainer =
                 new FrameLayout(this);
@@ -493,32 +502,86 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
-        // VIDEO VIEW
-        // --------------------------------------------------------
+        // ========================================================
+        // TEXTURE VIEW
+        // ========================================================
 
-        videoView =
-                new VideoView(this);
+        textureView =
+                new TextureView(this);
 
-        videoView.setBackgroundColor(
+        textureView.setBackgroundColor(
                 Color.BLACK
         );
 
+        textureView.setSurfaceTextureListener(
+                new TextureView.SurfaceTextureListener() {
 
-        FrameLayout.LayoutParams videoParams =
+                    @Override
+                    public void onSurfaceTextureAvailable(
+                            SurfaceTexture surface,
+                            int width,
+                            int height
+                    ) {
+
+                        videoSurface =
+                                new Surface(surface);
+
+                        if (pendingVideoUri != null &&
+                                videoMode) {
+
+                            startMediaPlayer(
+                                    pendingVideoUri
+                            );
+                        }
+                    }
+
+
+                    @Override
+                    public void onSurfaceTextureSizeChanged(
+                            SurfaceTexture surface,
+                            int width,
+                            int height
+                    ) {
+                    }
+
+
+                    @Override
+                    public boolean onSurfaceTextureDestroyed(
+                            SurfaceTexture surface
+                    ) {
+
+                        stopVideoPlayback();
+
+                        videoSurface = null;
+
+                        return true;
+                    }
+
+
+                    @Override
+                    public void onSurfaceTextureUpdated(
+                            SurfaceTexture surface
+                    ) {
+                    }
+                }
+        );
+
+
+        FrameLayout.LayoutParams textureParams =
                 new FrameLayout.LayoutParams(
                         -1,
                         -1
                 );
 
         videoContainer.addView(
-                videoView,
-                videoParams
+                textureView,
+                textureParams
         );
 
 
-        // Initially height = 0.
-        // PLAY के समय इसे weight = 1 करके full screen किया जाएगा.
+        // ========================================================
+        // VIDEO CONTAINER IN ROOT
+        // ========================================================
 
         LinearLayout.LayoutParams videoContainerParams =
                 new LinearLayout.LayoutParams(
@@ -532,68 +595,9 @@ public class MainActivity extends Activity {
         );
 
 
-        // --------------------------------------------------------
-        // MEDIA CONTROLLER
-        // --------------------------------------------------------
-
-        mediaController =
-                new MediaController(this);
-
-        mediaController.setAnchorView(
-                videoView
-        );
-
-        videoView.setMediaController(
-                mediaController
-        );
-
-
-        // --------------------------------------------------------
-        // VIDEO PREPARED
-        // --------------------------------------------------------
-
-        videoView.setOnPreparedListener(
-                mp -> {
-
-                    try {
-
-                        mp.setScreenOnWhilePlaying(
-                                true
-                        );
-
-                        videoView.requestFocus();
-
-                        videoView.start();
-
-                    } catch (Exception e) {
-
-                        showVideoError(
-                                e.getMessage()
-                        );
-                    }
-                }
-        );
-
-
-        // --------------------------------------------------------
-        // VIDEO ERROR
-        // --------------------------------------------------------
-
-        videoView.setOnErrorListener(
-                (mp, what, extra) -> {
-
-                    showVideoError(
-                            "Video format या file access में समस्या है."
-                    );
-
-                    return true;
-                }
-        );
-
-
-        // --------------------------------------------------------
+        // ========================================================
         // SET CONTENT VIEW
-        // --------------------------------------------------------
+        // ========================================================
 
         setContentView(
                 rootLayout
@@ -778,7 +782,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // UPDATE EXPIRY TEXT
+    // EXPIRY TEXT
     // ============================================================
 
     private void updateExpiryText() {
@@ -897,7 +901,6 @@ public class MainActivity extends Activity {
                         resultCode != RESULT_OK ||
                         data == null
         ) {
-
             return;
         }
 
@@ -976,7 +979,6 @@ public class MainActivity extends Activity {
                         uriString
                 )
         ) {
-
             return;
         }
 
@@ -1044,7 +1046,6 @@ public class MainActivity extends Activity {
     private void loadVideos() {
 
         videoUris.clear();
-
         videoNames.clear();
 
         int count =
@@ -1091,10 +1092,7 @@ public class MainActivity extends Activity {
 
     private void refreshVideoList() {
 
-        if (
-                videoListLayout == null
-        ) {
-
+        if (videoListLayout == null) {
             return;
         }
 
@@ -1123,10 +1121,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-
-        // --------------------------------------------------------
-        // EVERY VIDEO
-        // --------------------------------------------------------
 
         for (
                 int i = 0;
@@ -1280,7 +1274,6 @@ public class MainActivity extends Activity {
                 index < 0 ||
                         index >= videoUris.size()
         ) {
-
             return;
         }
 
@@ -1348,23 +1341,144 @@ public class MainActivity extends Activity {
 
         try {
 
-            // पुराने playback को पहले रोकें
             stopVideoPlayback();
 
-            videoMode = true;
+            pendingVideoUri =
+                    uri;
+
+            videoMode =
+                    true;
 
             showOnlyVideo();
 
-            // URI सेट करें
-            videoView.setVideoURI(
-                    uri
-            );
+            // अगर TextureView पहले से तैयार है
+            if (
+                    textureView != null &&
+                            textureView.isAvailable()
+            ) {
 
-            videoView.requestFocus();
+                SurfaceTexture surfaceTexture =
+                        textureView.getSurfaceTexture();
+
+                if (surfaceTexture != null) {
+
+                    if (videoSurface == null) {
+
+                        videoSurface =
+                                new Surface(
+                                        surfaceTexture
+                                );
+                    }
+
+                    startMediaPlayer(
+                            uri
+                    );
+                }
+            }
 
         } catch (Exception e) {
 
-            exitVideoMode();
+            showVideoError(
+                    e.getMessage()
+            );
+        }
+    }
+
+
+    // ============================================================
+    // START MEDIA PLAYER
+    // ============================================================
+
+    private void startMediaPlayer(
+            Uri uri
+    ) {
+
+        if (!videoMode || uri == null) {
+            return;
+        }
+
+        try {
+
+            stopMediaPlayerOnly();
+
+            mediaPlayer =
+                    new MediaPlayer();
+
+            mediaPlayer.setDataSource(
+                    this,
+                    uri
+            );
+
+            if (videoSurface == null) {
+
+                SurfaceTexture surfaceTexture =
+                        textureView.getSurfaceTexture();
+
+                if (surfaceTexture == null) {
+
+                    showVideoError(
+                            "Video surface उपलब्ध नहीं है."
+                    );
+
+                    return;
+                }
+
+                videoSurface =
+                        new Surface(
+                                surfaceTexture
+                        );
+            }
+
+            mediaPlayer.setSurface(
+                    videoSurface
+            );
+
+            mediaPlayer.setScreenOnWhilePlaying(
+                    true
+            );
+
+            mediaPlayer.setOnPreparedListener(
+                    mp -> {
+
+                        try {
+
+                            if (!videoMode) {
+                                return;
+                            }
+
+                            mp.start();
+
+                        } catch (Exception e) {
+
+                            showVideoError(
+                                    e.getMessage()
+                            );
+                        }
+                    }
+            );
+
+            mediaPlayer.setOnCompletionListener(
+                    mp -> {
+
+                        // Video समाप्त होने पर screen बनी रहेगी।
+                        // User BACK से बाहर आ सकता है।
+                    }
+            );
+
+            mediaPlayer.setOnErrorListener(
+                    (mp, what, extra) -> {
+
+                        showVideoError(
+                                "Video render/play नहीं हो सकी."
+                        );
+
+                        return true;
+                    }
+            );
+
+            mediaPlayer.prepareAsync();
+
+        } catch (Exception e) {
 
             showVideoError(
                     e.getMessage()
@@ -1379,7 +1493,6 @@ public class MainActivity extends Activity {
 
     private void showOnlyVideo() {
 
-        // Main controls छिपाएँ
         if (contentLayout != null) {
 
             contentLayout.setVisibility(
@@ -1387,15 +1500,9 @@ public class MainActivity extends Activity {
             );
         }
 
-
-        // Video container दिखाएँ
         videoContainer.setVisibility(
                 View.VISIBLE
         );
-
-
-        // सबसे जरूरी FIX:
-        // Video container को पूरी available height दें.
 
         LinearLayout.LayoutParams params =
                 (LinearLayout.LayoutParams)
@@ -1413,10 +1520,12 @@ public class MainActivity extends Activity {
                 params
         );
 
-
-        // पूरा background black
         rootLayout.setBackgroundColor(
                 Color.BLACK
+        );
+
+        textureView.setVisibility(
+                View.VISIBLE
         );
     }
 
@@ -1430,6 +1539,8 @@ public class MainActivity extends Activity {
         stopVideoPlayback();
 
         videoMode = false;
+
+        pendingVideoUri = null;
 
 
         if (videoContainer != null) {
@@ -1471,20 +1582,45 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // STOP VIDEO
+    // STOP MEDIA PLAYER ONLY
     // ============================================================
 
-    private void stopVideoPlayback() {
+    private void stopMediaPlayerOnly() {
 
         try {
 
-            if (videoView != null) {
+            if (mediaPlayer != null) {
 
-                videoView.stopPlayback();
+                try {
+                    mediaPlayer.stop();
+                } catch (Exception ignored) {
+                }
+
+                try {
+                    mediaPlayer.reset();
+                } catch (Exception ignored) {
+                }
+
+                try {
+                    mediaPlayer.release();
+                } catch (Exception ignored) {
+                }
+
+                mediaPlayer = null;
             }
 
         } catch (Exception ignored) {
         }
+    }
+
+
+    // ============================================================
+    // STOP VIDEO PLAYBACK
+    // ============================================================
+
+    private void stopVideoPlayback() {
+
+        stopMediaPlayerOnly();
     }
 
 
@@ -1496,7 +1632,41 @@ public class MainActivity extends Activity {
             String message
     ) {
 
-        exitVideoMode();
+        stopVideoPlayback();
+
+        videoMode = false;
+
+        pendingVideoUri = null;
+
+        if (videoContainer != null) {
+
+            videoContainer.setVisibility(
+                    View.GONE
+            );
+
+            LinearLayout.LayoutParams params =
+                    (LinearLayout.LayoutParams)
+                            videoContainer
+                                    .getLayoutParams();
+
+            params.height = 0;
+            params.weight = 0;
+
+            videoContainer.setLayoutParams(
+                    params
+            );
+        }
+
+        if (contentLayout != null) {
+
+            contentLayout.setVisibility(
+                    View.VISIBLE
+            );
+        }
+
+        rootLayout.setBackgroundColor(
+                Color.WHITE
+        );
 
         String finalMessage;
 
@@ -1553,7 +1723,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // APP GOES TO BACKGROUND
+    // APP BACKGROUND
     // ============================================================
 
     @Override
@@ -1573,6 +1743,16 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
 
         stopVideoPlayback();
+
+        if (videoSurface != null) {
+
+            try {
+                videoSurface.release();
+            } catch (Exception ignored) {
+            }
+
+            videoSurface = null;
+        }
 
         super.onDestroy();
     }
