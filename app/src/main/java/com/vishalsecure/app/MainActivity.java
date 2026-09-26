@@ -8,8 +8,6 @@ import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ActivityInfo;
-import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -18,6 +16,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
 import android.widget.TextView;
@@ -26,6 +25,7 @@ import android.widget.VideoView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
@@ -33,9 +33,20 @@ public class MainActivity extends Activity {
 
     private static final int PICK_VIDEO_REQUEST = 1001;
 
+    private static final String PREFS_NAME =
+            "VishalSecurePrefs";
+
+    private static final String KEY_EXPIRY_TIME =
+            "expiry_time";
+
+    private static final String KEY_VIDEO_COUNT =
+            "video_count";
+
     private LinearLayout rootLayout;
+    private LinearLayout contentLayout;
     private LinearLayout videoListLayout;
-    private LinearLayout videoContainer;
+
+    private FrameLayout videoContainer;
 
     private EditText receiverName;
     private EditText receiverMobile;
@@ -52,15 +63,6 @@ public class MainActivity extends Activity {
 
     private SharedPreferences preferences;
 
-    private static final String PREFS_NAME =
-            "VishalSecurePrefs";
-
-    private static final String KEY_EXPIRY_TIME =
-            "expiry_time";
-
-    private static final String KEY_VIDEO_COUNT =
-            "video_count";
-
     private long expiryTime = 0L;
 
     private boolean videoMode = false;
@@ -71,6 +73,7 @@ public class MainActivity extends Activity {
     private final ArrayList<String> videoNames =
             new ArrayList<>();
 
+
     // ============================================================
     // ON CREATE
     // ============================================================
@@ -79,6 +82,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Screenshot / screen recording protection
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -95,40 +99,104 @@ public class MainActivity extends Activity {
         buildMainScreen();
     }
 
+
+    // ============================================================
+    // DP
+    // ============================================================
+
+    private int dp(int value) {
+
+        return (int) (
+                value *
+                        getResources()
+                                .getDisplayMetrics()
+                                .density
+                        + 0.5f
+        );
+    }
+
+
+    // ============================================================
+    // TEXT VIEW HELPER
+    // ============================================================
+
+    private TextView makeText(
+            String text,
+            float size,
+            int color
+    ) {
+
+        TextView textView =
+                new TextView(this);
+
+        textView.setText(text);
+        textView.setTextSize(size);
+        textView.setTextColor(color);
+
+        return textView;
+    }
+
+
     // ============================================================
     // MAIN SCREEN
     // ============================================================
 
     private void buildMainScreen() {
 
-        rootLayout = new LinearLayout(this);
+        rootLayout =
+                new LinearLayout(this);
+
         rootLayout.setOrientation(
                 LinearLayout.VERTICAL
         );
 
         rootLayout.setPadding(
-                30,
-                30,
-                30,
-                30
+                dp(20),
+                dp(20),
+                dp(20),
+                dp(20)
         );
 
         rootLayout.setBackgroundColor(
                 Color.WHITE
         );
 
+
+        // --------------------------------------------------------
+        // CONTENT LAYOUT
+        // --------------------------------------------------------
+
+        contentLayout =
+                new LinearLayout(this);
+
+        contentLayout.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        LinearLayout.LayoutParams contentParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        0,
+                        1
+                );
+
+        rootLayout.addView(
+                contentLayout,
+                contentParams
+        );
+
+
         // --------------------------------------------------------
         // TITLE
         // --------------------------------------------------------
 
-        titleText = new TextView(this);
+        titleText =
+                makeText(
+                        "VISHAL SECURE",
+                        26,
+                        Color.BLACK
+                );
 
-        titleText.setText(
-                "VISHAL SECURE"
-        );
-
-        titleText.setTextSize(26);
-        titleText.setTextColor(Color.BLACK);
         titleText.setGravity(
                 Gravity.CENTER
         );
@@ -138,28 +206,25 @@ public class MainActivity extends Activity {
                 android.graphics.Typeface.BOLD
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 titleText,
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 )
         );
+
 
         // --------------------------------------------------------
         // SUBTITLE
         // --------------------------------------------------------
 
-        subtitleText = new TextView(this);
-
-        subtitleText.setText(
-                "Secure Content"
-        );
-
-        subtitleText.setTextSize(16);
-        subtitleText.setTextColor(
-                Color.DKGRAY
-        );
+        subtitleText =
+                makeText(
+                        "Secure Content",
+                        16,
+                        Color.DKGRAY
+                );
 
         subtitleText.setGravity(
                 Gravity.CENTER
@@ -167,21 +232,22 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams subtitleParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 );
 
         subtitleParams.setMargins(
                 0,
-                5,
+                dp(5),
                 0,
-                25
+                dp(20)
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 subtitleText,
                 subtitleParams
         );
+
 
         // --------------------------------------------------------
         // RECEIVER NAME
@@ -194,15 +260,18 @@ public class MainActivity extends Activity {
                 "Receiver Name"
         );
 
-        receiverName.setTextSize(16);
+        receiverName.setTextSize(
+                16
+        );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 receiverName,
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 )
         );
+
 
         // --------------------------------------------------------
         // RECEIVER MOBILE
@@ -215,7 +284,9 @@ public class MainActivity extends Activity {
                 "Receiver Mobile"
         );
 
-        receiverMobile.setTextSize(16);
+        receiverMobile.setTextSize(
+                16
+        );
 
         receiverMobile.setInputType(
                 android.text.InputType.TYPE_CLASS_PHONE
@@ -223,21 +294,22 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams mobileParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 );
 
         mobileParams.setMargins(
                 0,
-                10,
+                dp(8),
                 0,
-                10
+                dp(8)
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 receiverMobile,
                 mobileParams
         );
+
 
         // --------------------------------------------------------
         // OPEN SECURE CONTENT
@@ -250,29 +322,34 @@ public class MainActivity extends Activity {
                 "OPEN SECURE CONTENT"
         );
 
-        openContentButton.setOnClickListener(v -> {
+        openContentButton.setOnClickListener(
+                v -> {
 
-            if (isExpired()) {
+                    if (isExpired()) {
 
-                Toast.makeText(
-                        MainActivity.this,
-                        "Content Expired",
-                        Toast.LENGTH_LONG
-                ).show();
+                        Toast.makeText(
+                                MainActivity.this,
+                                "Content Expired",
+                                Toast.LENGTH_LONG
+                        ).show();
 
-                return;
-            }
+                        updateExpiryText();
 
-            openVideoPicker();
-        });
+                        return;
+                    }
 
-        rootLayout.addView(
+                    openVideoPicker();
+                }
+        );
+
+        contentLayout.addView(
                 openContentButton,
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 )
         );
+
 
         // --------------------------------------------------------
         // SET EXPIRY
@@ -285,41 +362,39 @@ public class MainActivity extends Activity {
                 "SET EXPIRY"
         );
 
-        setExpiryButton.setTextSize(15);
-
-        setExpiryButton.setOnClickListener(v -> {
-            showExpiryDatePicker();
-        });
+        setExpiryButton.setOnClickListener(
+                v -> showExpiryDatePicker()
+        );
 
         LinearLayout.LayoutParams expiryButtonParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 );
 
         expiryButtonParams.setMargins(
                 0,
-                5,
+                dp(5),
                 0,
                 0
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 setExpiryButton,
                 expiryButtonParams
         );
+
 
         // --------------------------------------------------------
         // EXPIRY TEXT
         // --------------------------------------------------------
 
         expiryText =
-                new TextView(this);
-
-        expiryText.setTextSize(15);
-        expiryText.setTextColor(
-                Color.DKGRAY
-        );
+                makeText(
+                        "",
+                        15,
+                        Color.DKGRAY
+                );
 
         expiryText.setGravity(
                 Gravity.CENTER
@@ -327,52 +402,49 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams expiryTextParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 );
 
         expiryTextParams.setMargins(
                 0,
-                5,
+                dp(5),
                 0,
-                15
+                dp(10)
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 expiryText,
                 expiryTextParams
         );
 
         updateExpiryText();
 
+
         // --------------------------------------------------------
-        // VIDEO LIST TITLE
+        // SECURE VIDEOS TITLE
         // --------------------------------------------------------
 
         TextView listTitle =
-                new TextView(this);
-
-        listTitle.setText(
-                "SECURE VIDEOS"
-        );
-
-        listTitle.setTextSize(18);
-        listTitle.setTextColor(
-                Color.BLACK
-        );
+                makeText(
+                        "SECURE VIDEOS",
+                        18,
+                        Color.BLACK
+                );
 
         listTitle.setTypeface(
                 null,
                 android.graphics.Typeface.BOLD
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 listTitle,
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
+                        -1,
+                        -2
                 )
         );
+
 
         // --------------------------------------------------------
         // VIDEO LIST
@@ -387,37 +459,30 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams listParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        -1,
                         0,
                         1
                 );
 
         listParams.setMargins(
                 0,
-                10,
+                dp(8),
                 0,
                 0
         );
 
-        rootLayout.addView(
+        contentLayout.addView(
                 videoListLayout,
                 listParams
         );
+
 
         // --------------------------------------------------------
         // VIDEO CONTAINER
         // --------------------------------------------------------
 
         videoContainer =
-                new LinearLayout(this);
-
-        videoContainer.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        videoContainer.setGravity(
-                Gravity.CENTER
-        );
+                new FrameLayout(this);
 
         videoContainer.setBackgroundColor(
                 Color.BLACK
@@ -427,6 +492,11 @@ public class MainActivity extends Activity {
                 View.GONE
         );
 
+
+        // --------------------------------------------------------
+        // VIDEO VIEW
+        // --------------------------------------------------------
+
         videoView =
                 new VideoView(this);
 
@@ -434,24 +504,25 @@ public class MainActivity extends Activity {
                 Color.BLACK
         );
 
-        mediaController =
-                new MediaController(this);
 
-        videoView.setMediaController(
-                mediaController
-        );
+        FrameLayout.LayoutParams videoParams =
+                new FrameLayout.LayoutParams(
+                        -1,
+                        -1
+                );
 
         videoContainer.addView(
                 videoView,
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.MATCH_PARENT
-                )
+                videoParams
         );
+
+
+        // Initially height = 0.
+        // PLAY के समय इसे weight = 1 करके full screen किया जाएगा.
 
         LinearLayout.LayoutParams videoContainerParams =
                 new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        -1,
                         0
                 );
 
@@ -460,23 +531,49 @@ public class MainActivity extends Activity {
                 videoContainerParams
         );
 
+
+        // --------------------------------------------------------
+        // MEDIA CONTROLLER
+        // --------------------------------------------------------
+
+        mediaController =
+                new MediaController(this);
+
+        mediaController.setAnchorView(
+                videoView
+        );
+
+        videoView.setMediaController(
+                mediaController
+        );
+
+
         // --------------------------------------------------------
         // VIDEO PREPARED
         // --------------------------------------------------------
 
-        videoView.setOnPreparedListener(mp -> {
+        videoView.setOnPreparedListener(
+                mp -> {
 
-            try {
+                    try {
 
-                videoView.requestFocus();
+                        mp.setScreenOnWhilePlaying(
+                                true
+                        );
 
-                mp.setScreenOnWhilePlaying(true);
+                        videoView.requestFocus();
 
-                videoView.start();
+                        videoView.start();
 
-            } catch (Exception ignored) {
-            }
-        });
+                    } catch (Exception e) {
+
+                        showVideoError(
+                                e.getMessage()
+                        );
+                    }
+                }
+        );
+
 
         // --------------------------------------------------------
         // VIDEO ERROR
@@ -485,22 +582,26 @@ public class MainActivity extends Activity {
         videoView.setOnErrorListener(
                 (mp, what, extra) -> {
 
-                    Toast.makeText(
-                            MainActivity.this,
-                            "Video play नहीं हो सकी",
-                            Toast.LENGTH_LONG
-                    ).show();
-
-                    exitVideoMode();
+                    showVideoError(
+                            "Video format या file access में समस्या है."
+                    );
 
                     return true;
                 }
         );
 
-        setContentView(rootLayout);
+
+        // --------------------------------------------------------
+        // SET CONTENT VIEW
+        // --------------------------------------------------------
+
+        setContentView(
+                rootLayout
+        );
 
         refreshVideoList();
     }
+
 
     // ============================================================
     // EXPIRY DATE PICKER
@@ -508,38 +609,42 @@ public class MainActivity extends Activity {
 
     private void showExpiryDatePicker() {
 
-        final java.util.Calendar calendar =
-                java.util.Calendar.getInstance();
+        Calendar now =
+                Calendar.getInstance();
 
-        DatePickerDialog datePickerDialog =
+        DatePickerDialog dialog =
                 new DatePickerDialog(
                         this,
-                        (view, year, month, dayOfMonth) -> {
+
+                        (view, year, month, day) -> {
 
                             showExpiryTimePicker(
                                     year,
                                     month,
-                                    dayOfMonth
+                                    day
                             );
-
                         },
-                        calendar.get(
-                                java.util.Calendar.YEAR
+
+                        now.get(
+                                Calendar.YEAR
                         ),
-                        calendar.get(
-                                java.util.Calendar.MONTH
+
+                        now.get(
+                                Calendar.MONTH
                         ),
-                        calendar.get(
-                                java.util.Calendar.DAY_OF_MONTH
+
+                        now.get(
+                                Calendar.DAY_OF_MONTH
                         )
                 );
 
-        datePickerDialog.setTitle(
+        dialog.setTitle(
                 "Expiry Date"
         );
 
-        datePickerDialog.show();
+        dialog.show();
     }
+
 
     // ============================================================
     // EXPIRY TIME PICKER
@@ -551,55 +656,55 @@ public class MainActivity extends Activity {
             int day
     ) {
 
-        final java.util.Calendar calendar =
-                java.util.Calendar.getInstance();
+        Calendar now =
+                Calendar.getInstance();
 
-        TimePickerDialog timePickerDialog =
+        TimePickerDialog dialog =
                 new TimePickerDialog(
                         this,
-                        (view, hourOfDay, minute) -> {
 
-                            java.util.Calendar expiryCalendar =
-                                    java.util.Calendar.getInstance();
+                        (view, hour, minute) -> {
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.YEAR,
+                            Calendar expiry =
+                                    Calendar.getInstance();
+
+                            expiry.set(
+                                    Calendar.YEAR,
                                     year
                             );
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.MONTH,
+                            expiry.set(
+                                    Calendar.MONTH,
                                     month
                             );
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.DAY_OF_MONTH,
+                            expiry.set(
+                                    Calendar.DAY_OF_MONTH,
                                     day
                             );
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.HOUR_OF_DAY,
-                                    hourOfDay
+                            expiry.set(
+                                    Calendar.HOUR_OF_DAY,
+                                    hour
                             );
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.MINUTE,
+                            expiry.set(
+                                    Calendar.MINUTE,
                                     minute
                             );
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.SECOND,
+                            expiry.set(
+                                    Calendar.SECOND,
                                     0
                             );
 
-                            expiryCalendar.set(
-                                    java.util.Calendar.MILLISECOND,
+                            expiry.set(
+                                    Calendar.MILLISECOND,
                                     0
                             );
 
                             expiryTime =
-                                    expiryCalendar
-                                            .getTimeInMillis();
+                                    expiry.getTimeInMillis();
 
                             saveExpiry();
 
@@ -610,23 +715,26 @@ public class MainActivity extends Activity {
                                     "Expiry Set Successfully",
                                     Toast.LENGTH_SHORT
                             ).show();
-
                         },
-                        calendar.get(
-                                java.util.Calendar.HOUR_OF_DAY
+
+                        now.get(
+                                Calendar.HOUR_OF_DAY
                         ),
-                        calendar.get(
-                                java.util.Calendar.MINUTE
+
+                        now.get(
+                                Calendar.MINUTE
                         ),
+
                         false
                 );
 
-        timePickerDialog.setTitle(
+        dialog.setTitle(
                 "Expiry Time"
         );
 
-        timePickerDialog.show();
+        dialog.show();
     }
+
 
     // ============================================================
     // SAVE EXPIRY
@@ -642,6 +750,7 @@ public class MainActivity extends Activity {
                 .apply();
     }
 
+
     // ============================================================
     // LOAD EXPIRY
     // ============================================================
@@ -655,19 +764,18 @@ public class MainActivity extends Activity {
                 );
     }
 
+
     // ============================================================
     // CHECK EXPIRY
     // ============================================================
 
     private boolean isExpired() {
 
-        if (expiryTime <= 0L) {
-            return false;
-        }
-
-        return System.currentTimeMillis()
-                >= expiryTime;
+        return expiryTime > 0L &&
+                System.currentTimeMillis()
+                        >= expiryTime;
     }
+
 
     // ============================================================
     // UPDATE EXPIRY TEXT
@@ -700,7 +808,9 @@ public class MainActivity extends Activity {
 
         String date =
                 format.format(
-                        new Date(expiryTime)
+                        new Date(
+                                expiryTime
+                        )
                 );
 
         if (isExpired()) {
@@ -727,6 +837,7 @@ public class MainActivity extends Activity {
             );
         }
     }
+
 
     // ============================================================
     // VIDEO PICKER
@@ -763,6 +874,7 @@ public class MainActivity extends Activity {
         );
     }
 
+
     // ============================================================
     // ACTIVITY RESULT
     // ============================================================
@@ -780,9 +892,11 @@ public class MainActivity extends Activity {
                 data
         );
 
-        if (requestCode != PICK_VIDEO_REQUEST ||
-                resultCode != RESULT_OK ||
-                data == null) {
+        if (
+                requestCode != PICK_VIDEO_REQUEST ||
+                        resultCode != RESULT_OK ||
+                        data == null
+        ) {
 
             return;
         }
@@ -800,22 +914,20 @@ public class MainActivity extends Activity {
                         i++
                 ) {
 
-                    Uri uri =
+                    addVideo(
                             clipData
                                     .getItemAt(i)
-                                    .getUri();
-
-                    addVideo(uri);
+                                    .getUri()
+                    );
                 }
 
-            } else {
+            } else if (
+                    data.getData() != null
+            ) {
 
-                Uri uri =
-                        data.getData();
-
-                if (uri != null) {
-                    addVideo(uri);
-                }
+                addVideo(
+                        data.getData()
+                );
             }
 
             saveVideos();
@@ -832,11 +944,14 @@ public class MainActivity extends Activity {
         }
     }
 
+
     // ============================================================
     // ADD VIDEO
     // ============================================================
 
-    private void addVideo(Uri uri) {
+    private void addVideo(
+            Uri uri
+    ) {
 
         if (uri == null) {
             return;
@@ -856,7 +971,12 @@ public class MainActivity extends Activity {
         String uriString =
                 uri.toString();
 
-        if (videoUris.contains(uriString)) {
+        if (
+                videoUris.contains(
+                        uriString
+                )
+        ) {
+
             return;
         }
 
@@ -867,16 +987,20 @@ public class MainActivity extends Activity {
         String name =
                 uri.getLastPathSegment();
 
-        if (name == null ||
-                name.trim().isEmpty()) {
+        if (
+                name == null ||
+                        name.trim().isEmpty()
+        ) {
 
-            name = "Secure Video";
+            name =
+                    "Secure Video";
         }
 
         videoNames.add(
                 name
         );
     }
+
 
     // ============================================================
     // SAVE VIDEOS
@@ -911,6 +1035,7 @@ public class MainActivity extends Activity {
 
         editor.apply();
     }
+
 
     // ============================================================
     // LOAD VIDEOS
@@ -948,12 +1073,17 @@ public class MainActivity extends Activity {
 
             if (uri != null) {
 
-                videoUris.add(uri);
+                videoUris.add(
+                        uri
+                );
 
-                videoNames.add(name);
+                videoNames.add(
+                        name
+                );
             }
         }
     }
+
 
     // ============================================================
     // REFRESH VIDEO LIST
@@ -961,7 +1091,10 @@ public class MainActivity extends Activity {
 
     private void refreshVideoList() {
 
-        if (videoListLayout == null) {
+        if (
+                videoListLayout == null
+        ) {
+
             return;
         }
 
@@ -970,19 +1103,477 @@ public class MainActivity extends Activity {
         if (videoUris.isEmpty()) {
 
             TextView empty =
-                    new TextView(this);
-
-            empty.setText(
-                    "अभी कोई secure video नहीं है"
-            );
-
-            empty.setTextSize(15);
-
-            empty.setTextColor(
-                    Color.GRAY
-            );
+                    makeText(
+                            "अभी कोई secure video नहीं है",
+                            15,
+                            Color.GRAY
+                    );
 
             empty.setPadding(
-                    10,
-                    20,
-                    
+                    dp(10),
+                    dp(20),
+                    dp(10),
+                    dp(20)
+            );
+
+            videoListLayout.addView(
+                    empty
+            );
+
+            return;
+        }
+
+
+        // --------------------------------------------------------
+        // EVERY VIDEO
+        // --------------------------------------------------------
+
+        for (
+                int i = 0;
+                i < videoUris.size();
+                i++
+        ) {
+
+            final int index =
+                    i;
+
+            LinearLayout row =
+                    new LinearLayout(this);
+
+            row.setOrientation(
+                    LinearLayout.HORIZONTAL
+            );
+
+            row.setGravity(
+                    Gravity.CENTER_VERTICAL
+            );
+
+            row.setPadding(
+                    dp(5),
+                    dp(4),
+                    dp(5),
+                    dp(4)
+            );
+
+
+            // ----------------------------------------------------
+            // NAME
+            // ----------------------------------------------------
+
+            TextView name =
+                    makeText(
+                            videoNames.get(i),
+                            15,
+                            Color.BLACK
+                    );
+
+            LinearLayout.LayoutParams nameParams =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            -2,
+                            1
+                    );
+
+            row.addView(
+                    name,
+                    nameParams
+            );
+
+
+            // ----------------------------------------------------
+            // PLAY
+            // ----------------------------------------------------
+
+            Button play =
+                    new Button(this);
+
+            play.setText(
+                    "PLAY"
+            );
+
+            play.setOnClickListener(
+                    v -> {
+
+                        if (isExpired()) {
+
+                            Toast.makeText(
+                                    MainActivity.this,
+                                    "Content Expired",
+                                    Toast.LENGTH_LONG
+                            ).show();
+
+                            updateExpiryText();
+
+                            return;
+                        }
+
+                        if (
+                                index >= 0 &&
+                                        index < videoUris.size()
+                        ) {
+
+                            playVideo(
+                                    Uri.parse(
+                                            videoUris.get(index)
+                                    )
+                            );
+                        }
+                    }
+            );
+
+            row.addView(
+                    play,
+                    new LinearLayout.LayoutParams(
+                            -2,
+                            -2
+                    )
+            );
+
+
+            // ----------------------------------------------------
+            // DELETE
+            // ----------------------------------------------------
+
+            Button delete =
+                    new Button(this);
+
+            delete.setText(
+                    "DELETE"
+            );
+
+            delete.setOnClickListener(
+                    v ->
+                            confirmDeleteVideo(
+                                    index
+                            )
+            );
+
+            row.addView(
+                    delete,
+                    new LinearLayout.LayoutParams(
+                            -2,
+                            -2
+                    )
+            );
+
+
+            videoListLayout.addView(
+                    row,
+                    new LinearLayout.LayoutParams(
+                            -1,
+                            -2
+                    )
+            );
+        }
+    }
+
+
+    // ============================================================
+    // DELETE CONFIRMATION
+    // ============================================================
+
+    private void confirmDeleteVideo(
+            int index
+    ) {
+
+        if (
+                index < 0 ||
+                        index >= videoUris.size()
+        ) {
+
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+
+                .setTitle(
+                        "Delete Video"
+                )
+
+                .setMessage(
+                        "क्या यह secure video हटानी है?"
+                )
+
+                .setNegativeButton(
+                        "CANCEL",
+                        null
+                )
+
+                .setPositiveButton(
+                        "DELETE",
+                        (dialog, which) -> {
+
+                            videoUris.remove(
+                                    index
+                            );
+
+                            videoNames.remove(
+                                    index
+                            );
+
+                            saveVideos();
+
+                            refreshVideoList();
+                        }
+                )
+
+                .show();
+    }
+
+
+    // ============================================================
+    // PLAY VIDEO
+    // ============================================================
+
+    private void playVideo(
+            Uri uri
+    ) {
+
+        if (uri == null) {
+            return;
+        }
+
+        if (isExpired()) {
+
+            Toast.makeText(
+                    this,
+                    "Content Expired",
+                    Toast.LENGTH_LONG
+            ).show();
+
+            updateExpiryText();
+
+            return;
+        }
+
+        try {
+
+            // पुराने playback को पहले रोकें
+            stopVideoPlayback();
+
+            videoMode = true;
+
+            showOnlyVideo();
+
+            // URI सेट करें
+            videoView.setVideoURI(
+                    uri
+            );
+
+            videoView.requestFocus();
+
+        } catch (Exception e) {
+
+            exitVideoMode();
+
+            showVideoError(
+                    e.getMessage()
+            );
+        }
+    }
+
+
+    // ============================================================
+    // SHOW VIDEO ONLY
+    // ============================================================
+
+    private void showOnlyVideo() {
+
+        // Main controls छिपाएँ
+        if (contentLayout != null) {
+
+            contentLayout.setVisibility(
+                    View.GONE
+            );
+        }
+
+
+        // Video container दिखाएँ
+        videoContainer.setVisibility(
+                View.VISIBLE
+        );
+
+
+        // सबसे जरूरी FIX:
+        // Video container को पूरी available height दें.
+
+        LinearLayout.LayoutParams params =
+                (LinearLayout.LayoutParams)
+                        videoContainer
+                                .getLayoutParams();
+
+        params.width =
+                LinearLayout.LayoutParams.MATCH_PARENT;
+
+        params.height = 0;
+
+        params.weight = 1f;
+
+        videoContainer.setLayoutParams(
+                params
+        );
+
+
+        // पूरा background black
+        rootLayout.setBackgroundColor(
+                Color.BLACK
+        );
+    }
+
+
+    // ============================================================
+    // EXIT VIDEO MODE
+    // ============================================================
+
+    private void exitVideoMode() {
+
+        stopVideoPlayback();
+
+        videoMode = false;
+
+
+        if (videoContainer != null) {
+
+            videoContainer.setVisibility(
+                    View.GONE
+            );
+
+            LinearLayout.LayoutParams params =
+                    (LinearLayout.LayoutParams)
+                            videoContainer
+                                    .getLayoutParams();
+
+            params.height = 0;
+            params.weight = 0;
+
+            videoContainer.setLayoutParams(
+                    params
+            );
+        }
+
+
+        if (contentLayout != null) {
+
+            contentLayout.setVisibility(
+                    View.VISIBLE
+            );
+        }
+
+
+        rootLayout.setBackgroundColor(
+                Color.WHITE
+        );
+
+        refreshVideoList();
+
+        updateExpiryText();
+    }
+
+
+    // ============================================================
+    // STOP VIDEO
+    // ============================================================
+
+    private void stopVideoPlayback() {
+
+        try {
+
+            if (videoView != null) {
+
+                videoView.stopPlayback();
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+
+    // ============================================================
+    // VIDEO ERROR
+    // ============================================================
+
+    private void showVideoError(
+            String message
+    ) {
+
+        exitVideoMode();
+
+        String finalMessage;
+
+        if (
+                message == null ||
+                        message.trim().isEmpty()
+        ) {
+
+            finalMessage =
+                    "Video play नहीं हो सकी.";
+
+        } else {
+
+            finalMessage =
+                    "Video play नहीं हो सकी.\n\n" +
+                            message;
+        }
+
+        new AlertDialog.Builder(this)
+
+                .setTitle(
+                        "Vishal Secure"
+                )
+
+                .setMessage(
+                        finalMessage
+                )
+
+                .setPositiveButton(
+                        "OK",
+                        null
+                )
+
+                .show();
+    }
+
+
+    // ============================================================
+    // BACK BUTTON
+    // ============================================================
+
+    @Override
+    public void onBackPressed() {
+
+        if (videoMode) {
+
+            exitVideoMode();
+
+            return;
+        }
+
+        super.onBackPressed();
+    }
+
+
+    // ============================================================
+    // APP GOES TO BACKGROUND
+    // ============================================================
+
+    @Override
+    protected void onStop() {
+
+        stopVideoPlayback();
+
+        super.onStop();
+    }
+
+
+    // ============================================================
+    // ACTIVITY DESTROY
+    // ============================================================
+
+    @Override
+    protected void onDestroy() {
+
+        stopVideoPlayback();
+
+        super.onDestroy();
+    }
+}
