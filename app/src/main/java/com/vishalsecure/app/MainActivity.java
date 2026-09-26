@@ -63,6 +63,8 @@ public class MainActivity extends Activity {
 
     private long expiryTime = 0L;
 
+    private boolean videoMode = false;
+
     private final ArrayList<String> videoUris =
             new ArrayList<>();
 
@@ -77,7 +79,6 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Screenshot / screen recording protection
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -429,6 +430,10 @@ public class MainActivity extends Activity {
         videoView =
                 new VideoView(this);
 
+        videoView.setBackgroundColor(
+                Color.BLACK
+        );
+
         mediaController =
                 new MediaController(this);
 
@@ -444,24 +449,53 @@ public class MainActivity extends Activity {
                 )
         );
 
-        rootLayout.addView(
-                videoContainer,
+        LinearLayout.LayoutParams videoContainerParams =
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         0
-                )
+                );
+
+        rootLayout.addView(
+                videoContainer,
+                videoContainerParams
         );
 
         // --------------------------------------------------------
-        // WORKING VIDEO PLAYBACK
+        // VIDEO PREPARED
         // --------------------------------------------------------
 
         videoView.setOnPreparedListener(mp -> {
 
-            videoView.requestFocus();
+            try {
 
-            videoView.start();
+                videoView.requestFocus();
+
+                mp.setScreenOnWhilePlaying(true);
+
+                videoView.start();
+
+            } catch (Exception ignored) {
+            }
         });
+
+        // --------------------------------------------------------
+        // VIDEO ERROR
+        // --------------------------------------------------------
+
+        videoView.setOnErrorListener(
+                (mp, what, extra) -> {
+
+                    Toast.makeText(
+                            MainActivity.this,
+                            "Video play नहीं हो सकी",
+                            Toast.LENGTH_LONG
+                    ).show();
+
+                    exitVideoMode();
+
+                    return true;
+                }
+        );
 
         setContentView(rootLayout);
 
@@ -951,388 +985,4 @@ public class MainActivity extends Activity {
             empty.setPadding(
                     10,
                     20,
-                    10,
-                    20
-            );
-
-            videoListLayout.addView(
-                    empty
-            );
-
-            return;
-        }
-
-        for (
-                int i = 0;
-                i < videoUris.size();
-                i++
-        ) {
-
-            final int index = i;
-
-            LinearLayout row =
-                    new LinearLayout(this);
-
-            row.setOrientation(
-                    LinearLayout.HORIZONTAL
-            );
-
-            row.setGravity(
-                    Gravity.CENTER_VERTICAL
-            );
-
-            TextView name =
-                    new TextView(this);
-
-            name.setText(
-                    videoNames.get(i)
-            );
-
-            name.setTextSize(16);
-
-            name.setTextColor(
-                    Color.BLACK
-            );
-
-            name.setGravity(
-                    Gravity.CENTER_VERTICAL
-            );
-
-            Button play =
-                    new Button(this);
-
-            play.setText(
-                    "PLAY"
-            );
-
-            play.setOnClickListener(v -> {
-
-                if (isExpired()) {
-
-                    Toast.makeText(
-                            MainActivity.this,
-                            "Content Expired",
-                            Toast.LENGTH_LONG
-                    ).show();
-
-                    return;
-                }
-
-                Uri uri =
-                        Uri.parse(
-                                videoUris.get(index)
-                        );
-
-                playVideo(uri);
-            });
-
-            Button delete =
-                    new Button(this);
-
-            delete.setText(
-                    "DELETE"
-            );
-
-            delete.setOnClickListener(v -> {
-
-                stopVideoPlayback();
-
-                if (
-                        index >= 0 &&
-                        index < videoUris.size()
-                ) {
-
-                    videoUris.remove(index);
-
-                    videoNames.remove(index);
-
-                    saveVideos();
-
-                    refreshVideoList();
-                }
-            });
-
-            LinearLayout.LayoutParams nameParams =
-                    new LinearLayout.LayoutParams(
-                            0,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                            1
-                    );
-
-            row.addView(
-                    name,
-                    nameParams
-            );
-
-            row.addView(
-                    play
-            );
-
-            row.addView(
-                    delete
-            );
-
-            videoListLayout.addView(
-                    row
-            );
-        }
-    }
-
-    // ============================================================
-    // PLAY VIDEO
-    // ============================================================
-
-    private void playVideo(Uri uri) {
-
-        if (uri == null) {
-            return;
-        }
-
-        if (isExpired()) {
-
-            Toast.makeText(
-                    this,
-                    "Content Expired",
-                    Toast.LENGTH_LONG
-            ).show();
-
-            return;
-        }
-
-        try {
-
-            videoView.stopPlayback();
-
-            enterVideoMode();
-
-            videoView.setVideoURI(
-                    uri
-            );
-
-            videoView.requestFocus();
-
-        } catch (Exception e) {
-
-            exitVideoMode();
-
-            new AlertDialog.Builder(this)
-                    .setTitle(
-                            "Vishal Secure"
-                    )
-                    .setMessage(
-                            "Video open नहीं हो सकी.\n\n" +
-                                    e.getMessage()
-                    )
-                    .setPositiveButton(
-                            "OK",
-                            null
-                    )
-                    .show();
-        }
-    }
-
-    // ============================================================
-    // ENTER VIDEO MODE
-    // ============================================================
-
-    private void enterVideoMode() {
-
-        receiverName.setVisibility(
-                View.GONE
-        );
-
-        receiverMobile.setVisibility(
-                View.GONE
-        );
-
-        openContentButton.setVisibility(
-                View.GONE
-        );
-
-        setExpiryButton.setVisibility(
-                View.GONE
-        );
-
-        expiryText.setVisibility(
-                View.GONE
-        );
-
-        videoListLayout.setVisibility(
-                View.GONE
-        );
-
-        titleText.setVisibility(
-                View.GONE
-        );
-
-        subtitleText.setVisibility(
-                View.GONE
-        );
-
-        videoContainer.setVisibility(
-                View.VISIBLE
-        );
-
-        getWindow().setFlags(
-                WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
-
-        setRequestedOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR
-        );
-    }
-
-    // ============================================================
-    // EXIT VIDEO MODE
-    // ============================================================
-
-    private void exitVideoMode() {
-
-        stopVideoPlayback();
-
-        videoContainer.setVisibility(
-                View.GONE
-        );
-
-        receiverName.setVisibility(
-                View.VISIBLE
-        );
-
-        receiverMobile.setVisibility(
-                View.VISIBLE
-        );
-
-        openContentButton.setVisibility(
-                View.VISIBLE
-        );
-
-        setExpiryButton.setVisibility(
-                View.VISIBLE
-        );
-
-        expiryText.setVisibility(
-                View.VISIBLE
-        );
-
-        videoListLayout.setVisibility(
-                View.VISIBLE
-        );
-
-        titleText.setVisibility(
-                View.VISIBLE
-        );
-
-        subtitleText.setVisibility(
-                View.VISIBLE
-        );
-
-        getWindow().clearFlags(
-                WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
-
-        setRequestedOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        );
-    }
-
-    // ============================================================
-    // STOP VIDEO PLAYBACK
-    // ============================================================
-
-    private void stopVideoPlayback() {
-
-        try {
-
-            if (mediaController != null) {
-
-                mediaController.hide();
-            }
-
-        } catch (Exception ignored) {
-        }
-
-        try {
-
-            if (videoView != null) {
-
-                videoView.stopPlayback();
-            }
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    // ============================================================
-    // BACK BUTTON
-    // ============================================================
-
-    @Override
-    public void onBackPressed() {
-
-        if (
-                videoContainer != null &&
-                videoContainer.getVisibility()
-                        == View.VISIBLE
-        ) {
-
-            exitVideoMode();
-
-            return;
-        }
-
-        stopVideoPlayback();
-
-        super.onBackPressed();
-    }
-
-    // ============================================================
-    // PAUSE
-    // ============================================================
-
-    @Override
-    protected void onPause() {
-
-        stopVideoPlayback();
-
-        super.onPause();
-    }
-
-    // ============================================================
-    // STOP
-    // ============================================================
-
-    @Override
-    protected void onStop() {
-
-        stopVideoPlayback();
-
-        super.onStop();
-    }
-
-    // ============================================================
-    // DESTROY
-    // ============================================================
-
-    @Override
-    protected void onDestroy() {
-
-        stopVideoPlayback();
-
-        super.onDestroy();
-    }
-
-    // ============================================================
-    // CONFIGURATION CHANGE
-    // ============================================================
-
-    @Override
-    public void onConfigurationChanged(
-            Configuration newConfig
-    ) {
-
-        super.onConfigurationChanged(
-                newConfig
-        );
-    }
-}
+                    
