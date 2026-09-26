@@ -4,19 +4,24 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
+
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+
 import android.graphics.Color;
-import android.graphics.SurfaceTexture;
+
 import android.net.Uri;
+
 import android.os.Bundle;
+
 import android.view.Gravity;
-import android.view.Surface;
-import android.view.TextureView;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
+
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -32,7 +37,25 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
+
+/**
+ * Vishal Secure
+ *
+ * Main features:
+ * 1. Receiver Name
+ * 2. Receiver Mobile
+ * 3. Secure Video Selection
+ * 4. Multiple Video Storage
+ * 5. Play / Delete
+ * 6. Expiry Date + Time
+ * 7. Screenshot / Screen Recording Protection
+ * 8. Secure SurfaceView Video Playback
+ */
 public class MainActivity extends Activity {
+
+    // ============================================================
+    // CONSTANTS
+    // ============================================================
 
     private static final int PICK_VIDEO_REQUEST = 1001;
 
@@ -45,33 +68,69 @@ public class MainActivity extends Activity {
     private static final String KEY_VIDEO_COUNT =
             "video_count";
 
+
+    // ============================================================
+    // MAIN UI
+    // ============================================================
+
     private LinearLayout rootLayout;
+
     private LinearLayout contentLayout;
+
     private LinearLayout videoListLayout;
 
     private FrameLayout videoContainer;
 
+
+    // ============================================================
+    // RECEIVER
+    // ============================================================
+
     private EditText receiverName;
+
     private EditText receiverMobile;
 
+
+    // ============================================================
+    // BUTTONS
+    // ============================================================
+
     private Button openContentButton;
+
     private Button setExpiryButton;
 
+
+    // ============================================================
+    // TEXT
+    // ============================================================
+
     private TextView expiryText;
+
     private TextView titleText;
+
     private TextView subtitleText;
+
 
     // ============================================================
     // VIDEO ENGINE
     // ============================================================
 
-    private TextureView textureView;
+    private SurfaceView surfaceView;
+
+    private SurfaceHolder surfaceHolder;
+
     private MediaPlayer mediaPlayer;
-    private Surface videoSurface;
 
     private Uri pendingVideoUri;
 
     private boolean videoMode = false;
+
+    private boolean surfaceReady = false;
+
+
+    // ============================================================
+    // STORAGE
+    // ============================================================
 
     private SharedPreferences preferences;
 
@@ -90,31 +149,54 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
 
-        // Screenshot / screen recording protection
+
+        // --------------------------------------------------------
+        // SCREENSHOT / SCREEN RECORDING PROTECTION
+        // --------------------------------------------------------
+
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
-        preferences = getSharedPreferences(
-                PREFS_NAME,
-                Context.MODE_PRIVATE
-        );
+
+        // --------------------------------------------------------
+        // PREFERENCES
+        // --------------------------------------------------------
+
+        preferences =
+                getSharedPreferences(
+                        PREFS_NAME,
+                        Context.MODE_PRIVATE
+                );
+
+
+        // --------------------------------------------------------
+        // LOAD SAVED DATA
+        // --------------------------------------------------------
 
         loadExpiry();
+
         loadVideos();
+
+
+        // --------------------------------------------------------
+        // BUILD SCREEN
+        // --------------------------------------------------------
 
         buildMainScreen();
     }
 
 
     // ============================================================
-    // DP
+    // DP HELPER
     // ============================================================
 
     private int dp(int value) {
+
         return (int) (
                 value *
                         getResources()
@@ -126,7 +208,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // TEXT VIEW
+    // TEXT VIEW HELPER
     // ============================================================
 
     private TextView makeText(
@@ -139,7 +221,9 @@ public class MainActivity extends Activity {
                 new TextView(this);
 
         textView.setText(text);
+
         textView.setTextSize(size);
+
         textView.setTextColor(color);
 
         return textView;
@@ -147,7 +231,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // MAIN SCREEN
+    // BUILD MAIN SCREEN
     // ============================================================
 
     private void buildMainScreen() {
@@ -503,31 +587,48 @@ public class MainActivity extends Activity {
 
 
         // ========================================================
-        // TEXTURE VIEW
+        // SURFACE VIEW
         // ========================================================
 
-        textureView =
-                new TextureView(this);
+        surfaceView =
+                new SurfaceView(this);
 
-        textureView.setBackgroundColor(
+        surfaceView.setBackgroundColor(
                 Color.BLACK
         );
 
-        textureView.setSurfaceTextureListener(
-                new TextureView.SurfaceTextureListener() {
+
+        // --------------------------------------------------------
+        // SECURITY FOR SURFACE
+        // --------------------------------------------------------
+
+        surfaceView.setSecure(true);
+
+        surfaceView.setKeepScreenOn(true);
+
+
+        // --------------------------------------------------------
+        // SURFACE HOLDER
+        // --------------------------------------------------------
+
+        surfaceHolder =
+                surfaceView.getHolder();
+
+
+        surfaceHolder.addCallback(
+                new SurfaceHolder.Callback() {
 
                     @Override
-                    public void onSurfaceTextureAvailable(
-                            SurfaceTexture surface,
-                            int width,
-                            int height
+                    public void surfaceCreated(
+                            SurfaceHolder holder
                     ) {
 
-                        videoSurface =
-                                new Surface(surface);
+                        surfaceReady = true;
 
-                        if (pendingVideoUri != null &&
-                                videoMode) {
+                        if (
+                                videoMode &&
+                                pendingVideoUri != null
+                        ) {
 
                             startMediaPlayer(
                                     pendingVideoUri
@@ -537,8 +638,9 @@ public class MainActivity extends Activity {
 
 
                     @Override
-                    public void onSurfaceTextureSizeChanged(
-                            SurfaceTexture surface,
+                    public void surfaceChanged(
+                            SurfaceHolder holder,
+                            int format,
                             int width,
                             int height
                     ) {
@@ -546,36 +648,27 @@ public class MainActivity extends Activity {
 
 
                     @Override
-                    public boolean onSurfaceTextureDestroyed(
-                            SurfaceTexture surface
+                    public void surfaceDestroyed(
+                            SurfaceHolder holder
                     ) {
+
+                        surfaceReady = false;
 
                         stopVideoPlayback();
-
-                        videoSurface = null;
-
-                        return true;
-                    }
-
-
-                    @Override
-                    public void onSurfaceTextureUpdated(
-                            SurfaceTexture surface
-                    ) {
                     }
                 }
         );
 
 
-        FrameLayout.LayoutParams textureParams =
+        FrameLayout.LayoutParams surfaceParams =
                 new FrameLayout.LayoutParams(
                         -1,
                         -1
                 );
 
         videoContainer.addView(
-                textureView,
-                textureParams
+                surfaceView,
+                surfaceParams
         );
 
 
@@ -588,6 +681,8 @@ public class MainActivity extends Activity {
                         -1,
                         0
                 );
+
+        videoContainerParams.weight = 0f;
 
         rootLayout.addView(
                 videoContainer,
@@ -602,6 +697,11 @@ public class MainActivity extends Activity {
         setContentView(
                 rootLayout
         );
+
+
+        // ========================================================
+        // REFRESH VIDEO LIST
+        // ========================================================
 
         refreshVideoList();
     }
@@ -629,17 +729,11 @@ public class MainActivity extends Activity {
                             );
                         },
 
-                        now.get(
-                                Calendar.YEAR
-                        ),
+                        now.get(Calendar.YEAR),
 
-                        now.get(
-                                Calendar.MONTH
-                        ),
+                        now.get(Calendar.MONTH),
 
-                        now.get(
-                                Calendar.DAY_OF_MONTH
-                        )
+                        now.get(Calendar.DAY_OF_MONTH)
                 );
 
         dialog.setTitle(
@@ -782,7 +876,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // EXPIRY TEXT
+    // UPDATE EXPIRY TEXT
     // ============================================================
 
     private void updateExpiryText() {
@@ -790,6 +884,7 @@ public class MainActivity extends Activity {
         if (expiryText == null) {
             return;
         }
+
 
         if (expiryTime <= 0L) {
 
@@ -804,6 +899,7 @@ public class MainActivity extends Activity {
             return;
         }
 
+
         SimpleDateFormat format =
                 new SimpleDateFormat(
                         "dd-MM-yyyy hh:mm a",
@@ -816,6 +912,7 @@ public class MainActivity extends Activity {
                                 expiryTime
                         )
                 );
+
 
         if (isExpired()) {
 
@@ -844,7 +941,7 @@ public class MainActivity extends Activity {
 
 
     // ============================================================
-    // VIDEO PICKER
+    // OPEN VIDEO PICKER
     // ============================================================
 
     private void openVideoPicker() {
@@ -896,18 +993,22 @@ public class MainActivity extends Activity {
                 data
         );
 
+
         if (
                 requestCode != PICK_VIDEO_REQUEST ||
                         resultCode != RESULT_OK ||
                         data == null
         ) {
+
             return;
         }
+
 
         try {
 
             ClipData clipData =
                     data.getClipData();
+
 
             if (clipData != null) {
 
@@ -932,6 +1033,7 @@ public class MainActivity extends Activity {
                         data.getData()
                 );
             }
+
 
             saveVideos();
 
@@ -960,6 +1062,7 @@ public class MainActivity extends Activity {
             return;
         }
 
+
         try {
 
             getContentResolver()
@@ -971,23 +1074,29 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
         }
 
+
         String uriString =
                 uri.toString();
+
 
         if (
                 videoUris.contains(
                         uriString
                 )
         ) {
+
             return;
         }
+
 
         videoUris.add(
                 uriString
         );
 
+
         String name =
                 uri.getLastPathSegment();
+
 
         if (
                 name == null ||
@@ -997,6 +1106,7 @@ public class MainActivity extends Activity {
             name =
                     "Secure Video";
         }
+
 
         videoNames.add(
                 name
@@ -1013,10 +1123,12 @@ public class MainActivity extends Activity {
         SharedPreferences.Editor editor =
                 preferences.edit();
 
+
         editor.putInt(
                 KEY_VIDEO_COUNT,
                 videoUris.size()
         );
+
 
         for (
                 int i = 0;
@@ -1035,6 +1147,7 @@ public class MainActivity extends Activity {
             );
         }
 
+
         editor.apply();
     }
 
@@ -1046,13 +1159,16 @@ public class MainActivity extends Activity {
     private void loadVideos() {
 
         videoUris.clear();
+
         videoNames.clear();
+
 
         int count =
                 preferences.getInt(
                         KEY_VIDEO_COUNT,
                         0
                 );
+
 
         for (
                 int i = 0;
@@ -1066,11 +1182,13 @@ public class MainActivity extends Activity {
                             null
                     );
 
+
             String name =
                     preferences.getString(
                             "video_name_" + i,
                             "Secure Video"
                     );
+
 
             if (uri != null) {
 
@@ -1096,7 +1214,9 @@ public class MainActivity extends Activity {
             return;
         }
 
+
         videoListLayout.removeAllViews();
+
 
         if (videoUris.isEmpty()) {
 
@@ -1131,6 +1251,7 @@ public class MainActivity extends Activity {
             final int index =
                     i;
 
+
             LinearLayout row =
                     new LinearLayout(this);
 
@@ -1151,7 +1272,7 @@ public class MainActivity extends Activity {
 
 
             // ----------------------------------------------------
-            // NAME
+            // VIDEO NAME
             // ----------------------------------------------------
 
             TextView name =
@@ -1175,7 +1296,7 @@ public class MainActivity extends Activity {
 
 
             // ----------------------------------------------------
-            // PLAY
+            // PLAY BUTTON
             // ----------------------------------------------------
 
             Button play =
@@ -1184,6 +1305,7 @@ public class MainActivity extends Activity {
             play.setText(
                     "PLAY"
             );
+
 
             play.setOnClickListener(
                     v -> {
@@ -1201,6 +1323,7 @@ public class MainActivity extends Activity {
                             return;
                         }
 
+
                         if (
                                 index >= 0 &&
                                         index < videoUris.size()
@@ -1215,6 +1338,7 @@ public class MainActivity extends Activity {
                     }
             );
 
+
             row.addView(
                     play,
                     new LinearLayout.LayoutParams(
@@ -1225,7 +1349,7 @@ public class MainActivity extends Activity {
 
 
             // ----------------------------------------------------
-            // DELETE
+            // DELETE BUTTON
             // ----------------------------------------------------
 
             Button delete =
@@ -1235,12 +1359,14 @@ public class MainActivity extends Activity {
                     "DELETE"
             );
 
+
             delete.setOnClickListener(
                     v ->
                             confirmDeleteVideo(
                                     index
                             )
             );
+
 
             row.addView(
                     delete,
@@ -1274,8 +1400,10 @@ public class MainActivity extends Activity {
                 index < 0 ||
                         index >= videoUris.size()
         ) {
+
             return;
         }
+
 
         new AlertDialog.Builder(this)
 
@@ -1326,6 +1454,7 @@ public class MainActivity extends Activity {
             return;
         }
 
+
         if (isExpired()) {
 
             Toast.makeText(
@@ -1339,41 +1468,36 @@ public class MainActivity extends Activity {
             return;
         }
 
+
         try {
 
             stopVideoPlayback();
 
+
             pendingVideoUri =
                     uri;
+
 
             videoMode =
                     true;
 
+
             showOnlyVideo();
 
-            // अगर TextureView पहले से तैयार है
-            if (
-                    textureView != null &&
-                            textureView.isAvailable()
-            ) {
 
-                SurfaceTexture surfaceTexture =
-                        textureView.getSurfaceTexture();
+            /*
+             * SurfaceView visible होने के बाद उसका surface
+             * surfaceCreated() में मिलेगा।
+             *
+             * अगर surface पहले से तैयार है तो तुरंत
+             * MediaPlayer शुरू करेंगे।
+             */
 
-                if (surfaceTexture != null) {
+            if (surfaceReady) {
 
-                    if (videoSurface == null) {
-
-                        videoSurface =
-                                new Surface(
-                                        surfaceTexture
-                                );
-                    }
-
-                    startMediaPlayer(
-                            uri
-                    );
-                }
+                startMediaPlayer(
+                        uri
+                );
             }
 
         } catch (Exception e) {
@@ -1393,58 +1517,75 @@ public class MainActivity extends Activity {
             Uri uri
     ) {
 
-        if (!videoMode || uri == null) {
+        if (
+                !videoMode ||
+                        uri == null
+        ) {
+
             return;
         }
+
+
+        if (!surfaceReady) {
+
+            return;
+        }
+
 
         try {
 
             stopMediaPlayerOnly();
 
+
             mediaPlayer =
                     new MediaPlayer();
+
+
+            // ----------------------------------------------------
+            // DATA SOURCE
+            // ----------------------------------------------------
 
             mediaPlayer.setDataSource(
                     this,
                     uri
             );
 
-            if (videoSurface == null) {
 
-                SurfaceTexture surfaceTexture =
-                        textureView.getSurfaceTexture();
+            // ----------------------------------------------------
+            // VIDEO DISPLAY SURFACE
+            // ----------------------------------------------------
 
-                if (surfaceTexture == null) {
-
-                    showVideoError(
-                            "Video surface उपलब्ध नहीं है."
-                    );
-
-                    return;
-                }
-
-                videoSurface =
-                        new Surface(
-                                surfaceTexture
-                        );
-            }
-
-            mediaPlayer.setSurface(
-                    videoSurface
+            mediaPlayer.setDisplay(
+                    surfaceHolder
             );
+
+
+            // ----------------------------------------------------
+            // KEEP SCREEN ON
+            // ----------------------------------------------------
 
             mediaPlayer.setScreenOnWhilePlaying(
                     true
             );
+
+
+            // ----------------------------------------------------
+            // PREPARED
+            // ----------------------------------------------------
 
             mediaPlayer.setOnPreparedListener(
                     mp -> {
 
                         try {
 
-                            if (!videoMode) {
+                            if (
+                                    !videoMode ||
+                                            mediaPlayer == null
+                            ) {
+
                                 return;
                             }
+
 
                             mp.start();
 
@@ -1457,13 +1598,27 @@ public class MainActivity extends Activity {
                     }
             );
 
+
+            // ----------------------------------------------------
+            // COMPLETION
+            // ----------------------------------------------------
+
             mediaPlayer.setOnCompletionListener(
                     mp -> {
 
-                        // Video समाप्त होने पर screen बनी रहेगी।
-                        // User BACK से बाहर आ सकता है।
+                        /*
+                         * Video पूरा होने के बाद player
+                         * वहीं रुकेगा।
+                         *
+                         * BACK दबाने पर video mode बंद होगा।
+                         */
                     }
             );
+
+
+            // ----------------------------------------------------
+            // ERROR
+            // ----------------------------------------------------
 
             mediaPlayer.setOnErrorListener(
                     (mp, what, extra) -> {
@@ -1475,6 +1630,11 @@ public class MainActivity extends Activity {
                         return true;
                     }
             );
+
+
+            // ----------------------------------------------------
+            // PREPARE
+            // ----------------------------------------------------
 
             mediaPlayer.prepareAsync();
 
@@ -1500,31 +1660,39 @@ public class MainActivity extends Activity {
             );
         }
 
+
         videoContainer.setVisibility(
                 View.VISIBLE
         );
+
 
         LinearLayout.LayoutParams params =
                 (LinearLayout.LayoutParams)
                         videoContainer
                                 .getLayoutParams();
 
+
         params.width =
                 LinearLayout.LayoutParams.MATCH_PARENT;
 
+
         params.height = 0;
 
+
         params.weight = 1f;
+
 
         videoContainer.setLayoutParams(
                 params
         );
 
+
         rootLayout.setBackgroundColor(
                 Color.BLACK
         );
 
-        textureView.setVisibility(
+
+        surfaceView.setVisibility(
                 View.VISIBLE
         );
     }
@@ -1538,9 +1706,13 @@ public class MainActivity extends Activity {
 
         stopVideoPlayback();
 
-        videoMode = false;
 
-        pendingVideoUri = null;
+        videoMode =
+                false;
+
+
+        pendingVideoUri =
+                null;
 
 
         if (videoContainer != null) {
@@ -1549,13 +1721,17 @@ public class MainActivity extends Activity {
                     View.GONE
             );
 
+
             LinearLayout.LayoutParams params =
                     (LinearLayout.LayoutParams)
                             videoContainer
                                     .getLayoutParams();
 
+
             params.height = 0;
-            params.weight = 0;
+
+            params.weight = 0f;
+
 
             videoContainer.setLayoutParams(
                     params
@@ -1575,6 +1751,7 @@ public class MainActivity extends Activity {
                 Color.WHITE
         );
 
+
         refreshVideoList();
 
         updateExpiryText();
@@ -1592,21 +1769,31 @@ public class MainActivity extends Activity {
             if (mediaPlayer != null) {
 
                 try {
+
                     mediaPlayer.stop();
+
                 } catch (Exception ignored) {
                 }
 
+
                 try {
+
                     mediaPlayer.reset();
+
                 } catch (Exception ignored) {
                 }
+
 
                 try {
+
                     mediaPlayer.release();
+
                 } catch (Exception ignored) {
                 }
 
-                mediaPlayer = null;
+
+                mediaPlayer =
+                        null;
             }
 
         } catch (Exception ignored) {
@@ -1634,9 +1821,14 @@ public class MainActivity extends Activity {
 
         stopVideoPlayback();
 
-        videoMode = false;
 
-        pendingVideoUri = null;
+        videoMode =
+                false;
+
+
+        pendingVideoUri =
+                null;
+
 
         if (videoContainer != null) {
 
@@ -1644,18 +1836,23 @@ public class MainActivity extends Activity {
                     View.GONE
             );
 
+
             LinearLayout.LayoutParams params =
                     (LinearLayout.LayoutParams)
                             videoContainer
                                     .getLayoutParams();
 
+
             params.height = 0;
-            params.weight = 0;
+
+            params.weight = 0f;
+
 
             videoContainer.setLayoutParams(
                     params
             );
         }
+
 
         if (contentLayout != null) {
 
@@ -1664,11 +1861,17 @@ public class MainActivity extends Activity {
             );
         }
 
-        rootLayout.setBackgroundColor(
-                Color.WHITE
-        );
+
+        if (rootLayout != null) {
+
+            rootLayout.setBackgroundColor(
+                    Color.WHITE
+            );
+        }
+
 
         String finalMessage;
+
 
         if (
                 message == null ||
@@ -1685,22 +1888,29 @@ public class MainActivity extends Activity {
                             message;
         }
 
-        new AlertDialog.Builder(this)
 
-                .setTitle(
-                        "Vishal Secure"
-                )
+        if (
+                !isFinishing() &&
+                        !isDestroyed()
+        ) {
 
-                .setMessage(
-                        finalMessage
-                )
+            new AlertDialog.Builder(this)
 
-                .setPositiveButton(
-                        "OK",
-                        null
-                )
+                    .setTitle(
+                            "Vishal Secure"
+                    )
 
-                .show();
+                    .setMessage(
+                            finalMessage
+                    )
+
+                    .setPositiveButton(
+                            "OK",
+                            null
+                    )
+
+                    .show();
+        }
     }
 
 
@@ -1718,12 +1928,30 @@ public class MainActivity extends Activity {
             return;
         }
 
+
         super.onBackPressed();
     }
 
 
     // ============================================================
-    // APP BACKGROUND
+    // APP PAUSE
+    // ============================================================
+
+    @Override
+    protected void onPause() {
+
+        /*
+         * App background में जाने पर audio/video जारी नहीं रहेगा।
+         */
+
+        stopVideoPlayback();
+
+        super.onPause();
+    }
+
+
+    // ============================================================
+    // APP STOP
     // ============================================================
 
     @Override
@@ -1744,15 +1972,9 @@ public class MainActivity extends Activity {
 
         stopVideoPlayback();
 
-        if (videoSurface != null) {
+        pendingVideoUri = null;
 
-            try {
-                videoSurface.release();
-            } catch (Exception ignored) {
-            }
-
-            videoSurface = null;
-        }
+        surfaceReady = false;
 
         super.onDestroy();
     }
