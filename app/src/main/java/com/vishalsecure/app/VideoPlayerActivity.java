@@ -41,6 +41,8 @@ public class VideoPlayerActivity extends Activity
 
     private boolean surfaceReady = false;
     private boolean userSeeking = false;
+    private boolean videoPrepared = false;
+    private boolean shouldResumeAfterSurface = false;
 
     private final Handler handler = new Handler();
 
@@ -50,36 +52,33 @@ public class VideoPlayerActivity extends Activity
                 public void run() {
 
                     if (mediaPlayer != null &&
+                            videoPrepared &&
                             !userSeeking) {
 
                         try {
 
-                            if (mediaPlayer.isPlaying()) {
+                            int duration =
+                                    mediaPlayer.getDuration();
 
-                                int duration =
-                                        mediaPlayer.getDuration();
+                            int position =
+                                    mediaPlayer.getCurrentPosition();
 
-                                int position =
-                                        mediaPlayer.getCurrentPosition();
+                            if (duration > 0) {
 
-                                if (duration > 0) {
+                                int progress =
+                                        (int) (
+                                                (position * 1000L)
+                                                        / duration
+                                        );
 
-                                    seekBar.setMax(1000);
+                                seekBar.setProgress(
+                                        progress
+                                );
 
-                                    int progress =
-                                            (int)
-                                            ((position * 1000L)
-                                                    / duration);
-
-                                    seekBar.setProgress(
-                                            progress
-                                    );
-
-                                    updateTimeText(
-                                            position,
-                                            duration
-                                    );
-                                }
+                                updateTimeText(
+                                        position,
+                                        duration
+                                );
                             }
 
                         } catch (Exception ignored) {
@@ -94,20 +93,16 @@ public class VideoPlayerActivity extends Activity
             };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(
+            Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
 
-        /*
-         * Secure screen.
-         */
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
-        /*
-         * Allow portrait and landscape.
-         */
         setRequestedOrientation(
                 ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         );
@@ -169,7 +164,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * LOADING / ERROR TEXT
+         * STATUS TEXT
          */
         statusText =
                 new TextView(this);
@@ -259,7 +254,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * -10 SECONDS
+         * BACK 10 SEC
          */
         backButton =
                 new Button(this);
@@ -309,7 +304,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * +10 SECONDS
+         * FORWARD 10 SEC
          */
         forwardButton =
                 new Button(this);
@@ -394,9 +389,6 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
-        /*
-         * Controls at bottom.
-         */
         FrameLayout.LayoutParams controlParams =
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
@@ -412,7 +404,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * SEEK BAR
+         * SEEK BAR LISTENER
          */
         seekBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -425,6 +417,7 @@ public class VideoPlayerActivity extends Activity
 
                         if (fromUser &&
                                 mediaPlayer != null &&
+                                videoPrepared &&
                                 userSeeking) {
 
                             try {
@@ -433,9 +426,10 @@ public class VideoPlayerActivity extends Activity
                                         mediaPlayer.getDuration();
 
                                 int newPosition =
-                                        (int)
-                                        ((progress / 1000.0)
-                                                * duration);
+                                        (int) (
+                                                (progress / 1000.0)
+                                                        * duration
+                                        );
 
                                 updateTimeText(
                                         newPosition,
@@ -458,7 +452,8 @@ public class VideoPlayerActivity extends Activity
                     public void onStopTrackingTouch(
                             SeekBar bar) {
 
-                        if (mediaPlayer != null) {
+                        if (mediaPlayer != null &&
+                                videoPrepared) {
 
                             try {
 
@@ -466,10 +461,11 @@ public class VideoPlayerActivity extends Activity
                                         mediaPlayer.getDuration();
 
                                 int newPosition =
-                                        (int)
-                                        ((bar.getProgress()
-                                                / 1000.0)
-                                                * duration);
+                                        (int) (
+                                                (bar.getProgress()
+                                                        / 1000.0)
+                                                        * duration
+                                        );
 
                                 mediaPlayer.seekTo(
                                         newPosition
@@ -495,6 +491,41 @@ public class VideoPlayerActivity extends Activity
 
         surfaceHolder = holder;
 
+        /*
+         * IMPORTANT:
+         *
+         * If player already exists, do NOT create
+         * a new player. Just attach the new surface.
+         *
+         * This keeps the current video position.
+         */
+        if (mediaPlayer != null &&
+                videoPrepared) {
+
+            try {
+
+                mediaPlayer.setDisplay(
+                        surfaceHolder
+                );
+
+                if (shouldResumeAfterSurface) {
+
+                    mediaPlayer.start();
+
+                    playPauseButton.setText(
+                            "PAUSE"
+                    );
+
+                    shouldResumeAfterSurface =
+                            false;
+                }
+
+            } catch (Exception ignored) {
+            }
+
+            return;
+        }
+
         startVideo();
     }
 
@@ -507,21 +538,13 @@ public class VideoPlayerActivity extends Activity
 
         surfaceHolder = holder;
 
-        if (mediaPlayer != null) {
+        if (mediaPlayer != null &&
+                videoPrepared) {
 
             try {
 
                 mediaPlayer.setDisplay(
                         surfaceHolder
-                );
-
-                /*
-                 * Recalculate video size whenever
-                 * phone orientation changes.
-                 */
-                adjustVideoSize(
-                        mediaPlayer.getVideoWidth(),
-                        mediaPlayer.getVideoHeight()
                 );
 
             } catch (Exception ignored) {
@@ -535,7 +558,30 @@ public class VideoPlayerActivity extends Activity
 
         surfaceReady = false;
 
-        releasePlayer();
+        /*
+         * DO NOT release MediaPlayer here.
+         *
+         * During phone rotation Android destroys
+         * the old surface and creates a new one.
+         *
+         * Keeping MediaPlayer alive preserves
+         * the current video position.
+         */
+        if (mediaPlayer != null &&
+                videoPrepared) {
+
+            try {
+
+                shouldResumeAfterSurface =
+                        mediaPlayer.isPlaying();
+
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.pause();
+                }
+
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private void startVideo() {
@@ -546,8 +592,6 @@ public class VideoPlayerActivity extends Activity
 
             return;
         }
-
-        releasePlayer();
 
         try {
 
@@ -576,10 +620,19 @@ public class VideoPlayerActivity extends Activity
 
                         try {
 
+                            videoPrepared = true;
+
                             mp.setDisplay(
                                     surfaceHolder
                             );
 
+                            /*
+                             * FIT INSIDE SCREEN.
+                             *
+                             * Full video remains visible.
+                             * Nothing is cropped.
+                             * Original proportions remain.
+                             */
                             adjustVideoSize(
                                     mp.getVideoWidth(),
                                     mp.getVideoHeight()
@@ -666,15 +719,14 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * FULL-SCREEN VIDEO
+     * FIT VIDEO WITHOUT CROPPING
      *
-     * The video keeps its original proportions.
-     * Instead of making the whole video smaller,
-     * it fills the available screen.
+     * पूरा video दिखाई देगा।
+     * कोई हिस्सा काटा नहीं जाएगा।
+     * Video का original aspect ratio सुरक्षित रहेगा।
      *
-     * If the screen and video have different
-     * proportions, the excess part is cropped.
-     * This prevents faces from becoming stretched.
+     * इसलिए अगर phone और video का ratio अलग है,
+     * तो कुछ जगह BLACK SPACE दिखाई दे सकती है।
      */
     private void adjustVideoSize(
             int videoWidth,
@@ -715,40 +767,27 @@ public class VideoPlayerActivity extends Activity
         int finalHeight;
 
         /*
-         * CENTER-CROP:
-         *
-         * Fill the complete screen while
-         * preserving the original video ratio.
+         * FIT CENTER
          */
         if (videoRatio > screenRatio) {
 
-            /*
-             * Video is wider than screen.
-             * Height fills screen and width becomes
-             * larger than screen.
-             */
-            finalHeight =
-                    screenHeight;
-
-            finalWidth =
-                    Math.round(
-                            screenHeight *
-                                    videoRatio
-                    );
-
-        } else {
-
-            /*
-             * Video is taller than screen.
-             * Width fills screen and height becomes
-             * larger than screen.
-             */
             finalWidth =
                     screenWidth;
 
             finalHeight =
                     Math.round(
                             screenWidth /
+                                    videoRatio
+                    );
+
+        } else {
+
+            finalHeight =
+                    screenHeight;
+
+            finalWidth =
+                    Math.round(
+                            screenHeight *
                                     videoRatio
                     );
         }
@@ -773,7 +812,9 @@ public class VideoPlayerActivity extends Activity
 
     private void togglePlayPause() {
 
-        if (mediaPlayer == null) {
+        if (mediaPlayer == null ||
+                !videoPrepared) {
+
             return;
         }
 
@@ -802,7 +843,9 @@ public class VideoPlayerActivity extends Activity
 
     private void seekBackward() {
 
-        if (mediaPlayer == null) {
+        if (mediaPlayer == null ||
+                !videoPrepared) {
+
             return;
         }
 
@@ -827,7 +870,9 @@ public class VideoPlayerActivity extends Activity
 
     private void seekForward() {
 
-        if (mediaPlayer == null) {
+        if (mediaPlayer == null ||
+                !videoPrepared) {
+
             return;
         }
 
@@ -896,21 +941,17 @@ public class VideoPlayerActivity extends Activity
 
         super.onPause();
 
-        if (mediaPlayer != null) {
+        /*
+         * Do not permanently stop the player here.
+         * Rotation must preserve playback position.
+         */
+        if (mediaPlayer != null &&
+                videoPrepared) {
 
             try {
 
-                if (mediaPlayer.isPlaying()) {
-
-                    mediaPlayer.pause();
-
-                    if (playPauseButton != null) {
-
-                        playPauseButton.setText(
-                                "PLAY"
-                        );
-                    }
-                }
+                shouldResumeAfterSurface =
+                        mediaPlayer.isPlaying();
 
             } catch (Exception ignored) {
             }
@@ -923,9 +964,21 @@ public class VideoPlayerActivity extends Activity
         super.onResume();
 
         /*
-         * Video will not unexpectedly restart
-         * after rotation.
+         * Surface callbacks control playback
+         * during rotation.
          */
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        handler.removeCallbacks(
+                updateProgress
+        );
+
+        releasePlayer();
+
+        super.onDestroy();
     }
 
     private void releasePlayer() {
@@ -949,6 +1002,8 @@ public class VideoPlayerActivity extends Activity
 
             mediaPlayer = null;
         }
+
+        videoPrepared = false;
     }
 
     private void showError(
@@ -988,18 +1043,6 @@ public class VideoPlayerActivity extends Activity
                 )
                 .setCancelable(false)
                 .show();
-    }
-
-    @Override
-    protected void onDestroy() {
-
-        handler.removeCallbacks(
-                updateProgress
-        );
-
-        releasePlayer();
-
-        super.onDestroy();
     }
 
     private int dp(int value) {
