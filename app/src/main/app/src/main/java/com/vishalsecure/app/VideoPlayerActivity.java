@@ -45,7 +45,6 @@ public class VideoPlayerActivity extends Activity
     private boolean textureReady = false;
     private boolean videoPrepared = false;
     private boolean userSeeking = false;
-
     private boolean shouldResumeAfterSurface = false;
 
     private int savedPosition = 0;
@@ -58,7 +57,6 @@ public class VideoPlayerActivity extends Activity
 
     private final Runnable updateProgress =
             new Runnable() {
-
                 @Override
                 public void run() {
 
@@ -150,12 +148,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * =====================================================
          * VIDEO AREA
-         * =====================================================
-         *
-         * यह हिस्सा controls से पूरी तरह अलग है।
-         * इसलिए controls video के ऊपर नहीं आएंगे।
          */
         FrameLayout videoContainer =
                 new FrameLayout(this);
@@ -220,10 +213,6 @@ public class VideoPlayerActivity extends Activity
                 statusParams
         );
 
-        /*
-         * Video area बाकी available screen लेगा।
-         * नीचे controls के लिए अलग जगह रहेगी।
-         */
         LinearLayout.LayoutParams videoParams =
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -238,9 +227,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * =====================================================
          * CONTROL AREA
-         * =====================================================
          */
         LinearLayout controls =
                 new LinearLayout(this);
@@ -291,7 +278,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * -10 SEC
+         * BACK
          */
         backButton =
                 new Button(this);
@@ -341,7 +328,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * +10 SEC
+         * FORWARD
          */
         forwardButton =
                 new Button(this);
@@ -426,9 +413,6 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
-        /*
-         * Controls अब root के नीचे अलग area में हैं।
-         */
         root.addView(
                 controls,
                 new LinearLayout.LayoutParams(
@@ -517,12 +501,6 @@ public class VideoPlayerActivity extends Activity
 
         setContentView(root);
     }
-
-    /*
-     * =========================================================
-     * TEXTURE SURFACE
-     * =========================================================
-     */
 
     @Override
     public void onSurfaceTextureAvailable(
@@ -651,12 +629,6 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * =========================================================
-     * START VIDEO
-     * =========================================================
-     */
-
     private void startVideo() {
 
         if (!textureReady
@@ -783,12 +755,6 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * =========================================================
-     * RE-ATTACH EXISTING PLAYER AFTER ROTATION
-     * =========================================================
-     */
-
     private void attachExistingPlayer() {
 
         if (mediaPlayer == null
@@ -816,24 +782,6 @@ public class VideoPlayerActivity extends Activity
         } catch (Exception ignored) {
         }
     }
-
-    /*
-     * =========================================================
-     * VIDEO FIT CENTER
-     * =========================================================
-     *
-     * यह सबसे महत्वपूर्ण हिस्सा है।
-     *
-     * Video को पूरे उपलब्ध VIDEO AREA के अंदर fit किया जाता है।
-     *
-     * - crop नहीं
-     * - stretch नहीं
-     * - distortion नहीं
-     * - controls के पीछे video नहीं जाएगा
-     *
-     * अगर video और phone का aspect ratio अलग है,
-     * तो black space रह सकती है।
-     */
 
     private void applyVideoTransform() {
 
@@ -870,25 +818,14 @@ public class VideoPlayerActivity extends Activity
 
         float scale;
 
-        /*
-         * FIT CENTER
-         */
         if (videoRatio > viewRatio) {
 
-            /*
-             * Video ज्यादा चौड़ा है।
-             * Width पूरी available width लेगी।
-             */
             scale =
                     (float) viewWidth
                             / (float) videoWidth;
 
         } else {
 
-            /*
-             * Video ज्यादा लंबा है।
-             * Height पूरी available height लेगी।
-             */
             scale =
                     (float) viewHeight
                             / (float) videoHeight;
@@ -926,12 +863,6 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    /*
-     * =========================================================
-     * PLAY / PAUSE
-     * =========================================================
-     */
-
     private void togglePlayPause() {
 
         if (mediaPlayer == null
@@ -963,12 +894,6 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * =========================================================
-     * SEEK BACKWARD
-     * =========================================================
-     */
-
     private void seekBackward() {
 
         if (mediaPlayer == null
@@ -992,12 +917,6 @@ public class VideoPlayerActivity extends Activity
         } catch (Exception ignored) {
         }
     }
-
-    /*
-     * =========================================================
-     * SEEK FORWARD
-     * =========================================================
-     */
 
     private void seekForward() {
 
@@ -1025,12 +944,6 @@ public class VideoPlayerActivity extends Activity
         } catch (Exception ignored) {
         }
     }
-
-    /*
-     * =========================================================
-     * TIME
-     * =========================================================
-     */
 
     private void updateTimeText(
             int current,
@@ -1070,12 +983,6 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    /*
-     * =========================================================
-     * PAUSE / ROTATION
-     * =========================================================
-     */
-
     @Override
     protected void onPause() {
 
@@ -1102,12 +1009,6 @@ public class VideoPlayerActivity extends Activity
 
         super.onResume();
     }
-
-    /*
-     * =========================================================
-     * DESTROY
-     * =========================================================
-     */
 
     @Override
     protected void onDestroy() {
@@ -1158,12 +1059,6 @@ public class VideoPlayerActivity extends Activity
         videoPrepared = false;
     }
 
-    /*
-     * =========================================================
-     * ERROR
-     * =========================================================
-     */
-
     private void showError(
             String message) {
 
@@ -1202,12 +1097,6 @@ public class VideoPlayerActivity extends Activity
                 .setCancelable(false)
                 .show();
     }
-
-    /*
-     * =========================================================
-     * DP
-     * =========================================================
-     */
 
     private int dp(int value) {
 
