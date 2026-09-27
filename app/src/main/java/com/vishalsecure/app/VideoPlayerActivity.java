@@ -8,10 +8,9 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.Gravity;
-import android.view.MotionEvent;
+import android.view.View;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -41,7 +40,6 @@ public class VideoPlayerActivity extends Activity
 
     private float zoomFactor = 1.0f;
 
-    // Video speed
     private float playbackSpeed = 1.0f;
 
     private final Handler handler = new Handler();
@@ -78,7 +76,6 @@ public class VideoPlayerActivity extends Activity
 
         super.onCreate(savedInstanceState);
 
-        // Secure screen
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -116,7 +113,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // VIDEO
+        // VIDEO SURFACE
         //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         surfaceView =
@@ -147,7 +144,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // STATUS TEXT
+        // STATUS
         //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         statusText =
@@ -167,10 +164,6 @@ public class VideoPlayerActivity extends Activity
                 Gravity.CENTER
         );
 
-        statusText.setVisibility(
-                View.VISIBLE
-        );
-
         FrameLayout.LayoutParams
                 statusParams =
                 new FrameLayout.LayoutParams(
@@ -188,7 +181,6 @@ public class VideoPlayerActivity extends Activity
 
         //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // TOUCH OVERLAY
-        // केवल BUTTONS दिखाने/छिपाने के लिए
         //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         touchOverlay =
@@ -278,10 +270,6 @@ public class VideoPlayerActivity extends Activity
 
     private void createControlButtons() {
 
-        //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // TIME
-        //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
         timeText =
                 new TextView(this);
 
@@ -334,7 +322,6 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
-        // BACK 10
         Button backButton =
                 makeButton(
                         "⏪ 10s"
@@ -349,7 +336,6 @@ public class VideoPlayerActivity extends Activity
                 buttonParams()
         );
 
-        // PLAY / PAUSE
         Button playButton =
                 makeButton(
                         "▶ / ❚❚"
@@ -364,7 +350,6 @@ public class VideoPlayerActivity extends Activity
                 buttonParams()
         );
 
-        // FORWARD 10
         Button forwardButton =
                 makeButton(
                         "10s ⏩"
@@ -402,7 +387,6 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
-        // ZOOM -
         Button zoomOutButton =
                 makeButton(
                         "ZOOM −"
@@ -417,7 +401,6 @@ public class VideoPlayerActivity extends Activity
                 buttonParams()
         );
 
-        // ZOOM +
         Button zoomInButton =
                 makeButton(
                         "ZOOM +"
@@ -432,7 +415,6 @@ public class VideoPlayerActivity extends Activity
                 buttonParams()
         );
 
-        // SPEED
         Button speedButton =
                 makeButton(
                         "Speed 1x"
@@ -599,10 +581,6 @@ public class VideoPlayerActivity extends Activity
             }
         }
 
-        /*
-         * Rotation के बाद
-         * normal fit करें।
-         */
         zoomFactor = 1.0f;
 
         applyVideoFit();
@@ -797,7 +775,6 @@ public class VideoPlayerActivity extends Activity
             int position =
                     mediaPlayer.getCurrentPosition();
 
-            // समाप्त हो चुकी है तो फिर शुरू
             if (duration > 0 &&
                     position >= duration - 500) {
 
@@ -826,7 +803,7 @@ public class VideoPlayerActivity extends Activity
     }
 
     //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // SEEK
+    // 10 SECOND SEEK
     //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private void seekBy(
@@ -978,7 +955,8 @@ public class VideoPlayerActivity extends Activity
     }
 
     //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // NORMAL FIT
+    // VIDEO FIT
+    // ORIGINAL ASPECT RATIO
     //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private void applyVideoFit() {
@@ -1022,56 +1000,43 @@ public class VideoPlayerActivity extends Activity
                                     .getLayoutParams();
 
             /*
-             * PORTRAIT:
-             * पूरा video बीच में दिखाई देगा।
+             * IMPORTANT:
              *
-             * LANDSCAPE:
-             * video पूरी screen area में fit होगा।
+             * Portrait और Landscape दोनों में
+             * video का ORIGINAL aspect ratio रखा जाता है।
+             *
+             * इसलिए चेहरा/वीडियो stretch नहीं होगा।
              */
 
-            if (screenWidth > screenHeight) {
+            if (videoRatio > screenRatio) {
 
                 /*
-                 * Landscape
-                 *
-                 * Full screen dimensions.
-                 * SurfaceView screen भर देगा।
+                 * Video चौड़ी है।
+                 * Width पूरी screen।
                  */
                 params.width =
                         screenWidth;
 
                 params.height =
-                        screenHeight;
+                        (int) (
+                                screenWidth
+                                        / videoRatio
+                        );
 
             } else {
 
                 /*
-                 * Portrait
-                 *
-                 * पूरा video दिखाई देगा।
+                 * Video लंबी है।
+                 * Height पूरी screen।
                  */
-                if (videoRatio > screenRatio) {
+                params.height =
+                        screenHeight;
 
-                    params.width =
-                            screenWidth;
-
-                    params.height =
-                            (int) (
-                                    screenWidth
-                                            / videoRatio
-                            );
-
-                } else {
-
-                    params.height =
-                            screenHeight;
-
-                    params.width =
-                            (int) (
-                                    screenHeight
-                                            * videoRatio
-                            );
-                }
+                params.width =
+                        (int) (
+                                screenHeight
+                                        * videoRatio
+                        );
             }
 
             params.gravity =
@@ -1122,39 +1087,27 @@ public class VideoPlayerActivity extends Activity
             float fitHeight;
 
             /*
-             * Landscape में screen पूरी भरें।
+             * ORIGINAL ASPECT RATIO वाला
+             * base size निकालें।
              */
-            if (screenWidth > screenHeight) {
+
+            if (videoRatio > screenRatio) {
 
                 fitWidth =
                         screenWidth;
 
                 fitHeight =
-                        screenHeight;
+                        screenWidth
+                                / videoRatio;
 
             } else {
 
-                /*
-                 * Portrait में पूरा video fit करें।
-                 */
-                if (videoRatio > screenRatio) {
+                fitHeight =
+                        screenHeight;
 
-                    fitWidth =
-                            screenWidth;
-
-                    fitHeight =
-                            screenWidth
-                                    / videoRatio;
-
-                } else {
-
-                    fitHeight =
-                            screenHeight;
-
-                    fitWidth =
-                            screenHeight
-                                    * videoRatio;
-                }
+                fitWidth =
+                        screenHeight
+                                * videoRatio;
             }
 
             int newWidth =
@@ -1368,10 +1321,6 @@ public class VideoPlayerActivity extends Activity
             }
         });
     }
-
-    //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ERROR + CLOSE
-    //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private void showErrorAndClose(
             String message) {
