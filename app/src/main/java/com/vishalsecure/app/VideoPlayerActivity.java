@@ -3,33 +3,23 @@ package com.vishalsecure.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Color;
-import android.graphics.Matrix;
-import android.graphics.SurfaceTexture;
-import android.media.AudioManager;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.Surface;
-import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.MediaController;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.VideoView;
 
-public class VideoPlayerActivity extends Activity
-        implements TextureView.SurfaceTextureListener {
+public class VideoPlayerActivity extends Activity {
 
-    private TextureView textureView;
-    private FrameLayout videoContainer;
-
-    private Surface videoSurface;
-    private MediaPlayer mediaPlayer;
-
+    private VideoView videoView;
     private TextView statusText;
     private TextView timeText;
 
@@ -42,21 +32,18 @@ public class VideoPlayerActivity extends Activity
 
     private String videoUriString;
 
-    private boolean surfaceReady = false;
     private boolean prepared = false;
     private boolean userSeeking = false;
     private boolean destroyed = false;
 
     private int savedPosition = 0;
 
-    private int videoWidth = 0;
-    private int videoHeight = 0;
-
     private final android.os.Handler handler =
             new android.os.Handler();
 
     private final Runnable progressRunnable =
             new Runnable() {
+
                 @Override
                 public void run() {
 
@@ -66,20 +53,25 @@ public class VideoPlayerActivity extends Activity
 
                     try {
 
-                        if (mediaPlayer != null
+                        if (videoView != null
                                 && prepared) {
 
                             int duration =
-                                    mediaPlayer.getDuration();
+                                    videoView.getDuration();
 
                             int position =
-                                    mediaPlayer.getCurrentPosition();
+                                    videoView.getCurrentPosition();
 
                             if (!userSeeking
                                     && duration > 0) {
 
-                                seekBar.setMax(duration);
-                                seekBar.setProgress(position);
+                                seekBar.setMax(
+                                        duration
+                                );
+
+                                seekBar.setProgress(
+                                        position
+                                );
                             }
 
                             timeText.setText(
@@ -88,7 +80,7 @@ public class VideoPlayerActivity extends Activity
                                             + formatTime(duration)
                             );
 
-                            if (mediaPlayer.isPlaying()) {
+                            if (videoView.isPlaying()) {
 
                                 playPauseButton.setText(
                                         "PAUSE"
@@ -113,8 +105,13 @@ public class VideoPlayerActivity extends Activity
             };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(
+            Bundle savedInstanceState
+    ) {
+
+        super.onCreate(
+                savedInstanceState
+        );
 
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
@@ -156,7 +153,11 @@ public class VideoPlayerActivity extends Activity
                 Color.BLACK
         );
 
-        videoContainer =
+        /*
+         * VIDEO AREA
+         */
+
+        FrameLayout videoContainer =
                 new FrameLayout(this);
 
         videoContainer.setBackgroundColor(
@@ -176,30 +177,39 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
-        textureView =
-                new TextureView(this);
+        videoView =
+                new VideoView(this);
 
-        textureView.setBackgroundColor(
+        videoView.setBackgroundColor(
                 Color.BLACK
         );
 
-        textureView.setSurfaceTextureListener(
-                this
+        videoView.setKeepScreenOn(
+                true
         );
 
+        /*
+         * FIT CENTER:
+         * पूरा वीडियो दिखाई देगा।
+         * वीडियो crop नहीं होगी।
+         */
+
+        videoView.setScaleX(1.0f);
+        videoView.setScaleY(1.0f);
+
         FrameLayout.LayoutParams
-                textureParams =
+                videoParams =
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                 );
 
-        textureParams.gravity =
+        videoParams.gravity =
                 Gravity.CENTER;
 
         videoContainer.addView(
-                textureView,
-                textureParams
+                videoView,
+                videoParams
         );
 
         statusText =
@@ -221,14 +231,24 @@ public class VideoPlayerActivity extends Activity
                 Gravity.CENTER
         );
 
-        videoContainer.addView(
-                statusText,
+        FrameLayout.LayoutParams
+                statusParams =
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        Gravity.CENTER
-                )
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+
+        statusParams.gravity =
+                Gravity.CENTER;
+
+        videoContainer.addView(
+                statusText,
+                statusParams
         );
+
+        /*
+         * CONTROLS
+         */
 
         LinearLayout controls =
                 new LinearLayout(this);
@@ -304,22 +324,22 @@ public class VideoPlayerActivity extends Activity
 
         buttonRow.addView(
                 backButton,
-                equalButtonParams()
+                buttonParams()
         );
 
         buttonRow.addView(
                 playPauseButton,
-                equalButtonParams()
+                buttonParams()
         );
 
         buttonRow.addView(
                 forwardButton,
-                equalButtonParams()
+                buttonParams()
         );
 
         buttonRow.addView(
                 closeButton,
-                equalButtonParams()
+                buttonParams()
         );
 
         controls.addView(
@@ -365,43 +385,172 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
-        setContentView(root);
+        setContentView(
+                root
+        );
 
-        backButton.setOnClickListener(
-                new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        seekBackward();
+        /*
+         * VIDEO URI
+         */
+
+        try {
+
+            Uri uri =
+                    Uri.parse(
+                            videoUriString
+                    );
+
+            videoView.setVideoURI(
+                    uri
+            );
+
+        } catch (Exception e) {
+
+            showError(
+                    "VIDEO URI ERROR\n\n"
+                            + e.getClass()
+                            .getSimpleName()
+                            + "\n"
+                            + String.valueOf(
+                            e.getMessage()
+                    )
+            );
+
+            return;
+        }
+
+        /*
+         * PREPARED
+         */
+
+        videoView.setOnPreparedListener(
+                mp -> {
+
+                    try {
+
+                        prepared = true;
+
+                        statusText.setVisibility(
+                                View.GONE
+                        );
+
+                        int duration =
+                                videoView.getDuration();
+
+                        seekBar.setMax(
+                                duration
+                        );
+
+                        /*
+                         * Rotation या पुनः खोलने पर
+                         * पिछली position पर जाएँ।
+                         */
+
+                        if (savedPosition > 0) {
+
+                            videoView.seekTo(
+                                    savedPosition
+                            );
+                        }
+
+                        playPauseButton.setText(
+                                "PLAY"
+                        );
+
+                    } catch (Exception e) {
+
+                        showError(
+                                "VIDEO READY ERROR\n\n"
+                                        + e.getClass()
+                                        .getSimpleName()
+                                        + "\n"
+                                        + String.valueOf(
+                                        e.getMessage()
+                                )
+                        );
                     }
                 }
         );
+
+        /*
+         * VIDEO ERROR
+         */
+
+        videoView.setOnErrorListener(
+                (mp, what, extra) -> {
+
+                    prepared = false;
+
+                    showError(
+                            "VIDEO PLAYBACK ERROR\n\n"
+                                    + "what = "
+                                    + what
+                                    + "\n"
+                                    + "extra = "
+                                    + extra
+                    );
+
+                    return true;
+                }
+        );
+
+        /*
+         * COMPLETION
+         */
+
+        videoView.setOnCompletionListener(
+                mp -> {
+
+                    try {
+
+                        playPauseButton.setText(
+                                "PLAY"
+                        );
+
+                        seekBar.setProgress(
+                                0
+                        );
+
+                    } catch (Exception ignored) {
+                    }
+                }
+        );
+
+        /*
+         * PLAY / PAUSE
+         */
 
         playPauseButton.setOnClickListener(
-                new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        togglePlayPause();
-                    }
-                }
+                v -> togglePlayPause()
         );
+
+        /*
+         * BACKWARD
+         */
+
+        backButton.setOnClickListener(
+                v -> seekBackward()
+        );
+
+        /*
+         * FORWARD
+         */
 
         forwardButton.setOnClickListener(
-                new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        seekForward();
-                    }
-                }
+                v -> seekForward()
         );
 
+        /*
+         * CLOSE
+         */
+
         closeButton.setOnClickListener(
-                new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        finish();
-                    }
-                }
+                v -> finish()
         );
+
+        /*
+         * SEEK BAR
+         */
 
         seekBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -414,7 +563,7 @@ public class VideoPlayerActivity extends Activity
                     ) {
 
                         if (fromUser
-                                && mediaPlayer != null
+                                && videoView != null
                                 && prepared) {
 
                             try {
@@ -423,7 +572,7 @@ public class VideoPlayerActivity extends Activity
                                         formatTime(progress)
                                                 + " / "
                                                 + formatTime(
-                                                mediaPlayer
+                                                videoView
                                                         .getDuration()
                                         )
                                 );
@@ -448,12 +597,12 @@ public class VideoPlayerActivity extends Activity
 
                         userSeeking = false;
 
-                        if (mediaPlayer != null
+                        if (videoView != null
                                 && prepared) {
 
                             try {
 
-                                mediaPlayer.seekTo(
+                                videoView.seekTo(
                                         bar.getProgress()
                                 );
 
@@ -463,341 +612,12 @@ public class VideoPlayerActivity extends Activity
                     }
                 }
         );
-
-        videoContainer.addOnLayoutChangeListener(
-                new View.OnLayoutChangeListener() {
-
-                    @Override
-                    public void onLayoutChange(
-                            View v,
-                            int left,
-                            int top,
-                            int right,
-                            int bottom,
-                            int oldLeft,
-                            int oldTop,
-                            int oldRight,
-                            int oldBottom
-                    ) {
-
-                        applyVideoTransform();
-                    }
-                }
-        );
-    }
-
-    private LinearLayout.LayoutParams
-    equalButtonParams() {
-
-        return new LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1.0f
-        );
-    }
-
-    @Override
-    public void onSurfaceTextureAvailable(
-            SurfaceTexture surfaceTexture,
-            int width,
-            int height
-    ) {
-
-        if (destroyed) {
-            return;
-        }
-
-        try {
-
-            surfaceReady = true;
-
-            if (videoSurface != null) {
-
-                try {
-                    videoSurface.release();
-                } catch (Exception ignored) {
-                }
-
-                videoSurface = null;
-            }
-
-            videoSurface =
-                    new Surface(
-                            surfaceTexture
-                    );
-
-            if (mediaPlayer == null) {
-
-                prepareVideo();
-
-            } else {
-
-                mediaPlayer.setSurface(
-                        videoSurface
-                );
-
-                if (savedPosition > 0
-                        && prepared) {
-
-                    mediaPlayer.seekTo(
-                            savedPosition
-                    );
-                }
-
-                applyVideoTransform();
-            }
-
-        } catch (Exception e) {
-
-            showError(
-                    "VIDEO SURFACE ERROR\n\n"
-                            + e.getClass()
-                            .getSimpleName()
-                            + "\n"
-                            + String.valueOf(
-                            e.getMessage()
-                    )
-            );
-        }
-    }
-
-    @Override
-    public void onSurfaceTextureSizeChanged(
-            SurfaceTexture surfaceTexture,
-            int width,
-            int height
-    ) {
-
-        applyVideoTransform();
-    }
-
-    @Override
-    public boolean onSurfaceTextureDestroyed(
-            SurfaceTexture surfaceTexture
-    ) {
-
-        surfaceReady = false;
-
-        if (mediaPlayer != null) {
-
-            try {
-
-                savedPosition =
-                        mediaPlayer.getCurrentPosition();
-
-            } catch (Exception ignored) {
-            }
-        }
-
-        if (videoSurface != null) {
-
-            try {
-                videoSurface.release();
-            } catch (Exception ignored) {
-            }
-
-            videoSurface = null;
-        }
-
-        return true;
-    }
-
-    @Override
-    public void onSurfaceTextureUpdated(
-            SurfaceTexture surfaceTexture
-    ) {
-    }
-
-    private void prepareVideo() {
-
-        if (destroyed
-                || !surfaceReady
-                || videoSurface == null) {
-
-            return;
-        }
-
-        try {
-
-            mediaPlayer =
-                    new MediaPlayer();
-
-            mediaPlayer.setAudioStreamType(
-                    AudioManager.STREAM_MUSIC
-            );
-
-            mediaPlayer.setScreenOnWhilePlaying(
-                    true
-            );
-
-            mediaPlayer.setSurface(
-                    videoSurface
-            );
-
-            mediaPlayer.setOnPreparedListener(
-                    new MediaPlayer.OnPreparedListener() {
-
-                        @Override
-                        public void onPrepared(
-                                MediaPlayer mp
-                        ) {
-
-                            if (destroyed) {
-                                return;
-                            }
-
-                            try {
-
-                                prepared = true;
-
-                                videoWidth =
-                                        mp.getVideoWidth();
-
-                                videoHeight =
-                                        mp.getVideoHeight();
-
-                                seekBar.setMax(
-                                        mp.getDuration()
-                                );
-
-                                statusText.setVisibility(
-                                        View.GONE
-                                );
-
-                                applyVideoTransform();
-
-                                if (savedPosition > 0) {
-
-                                    mp.seekTo(
-                                            savedPosition
-                                    );
-                                }
-
-                                /*
-                                 * यहां वीडियो अपने आप START नहीं होगी।
-                                 * पहले surface तैयार होगा।
-                                 * PLAY दबाने पर वीडियो चलेगी।
-                                 */
-
-                                playPauseButton.setText(
-                                        "PLAY"
-                                );
-
-                            } catch (Exception e) {
-
-                                showError(
-                                        "VIDEO READY ERROR\n\n"
-                                                + e.getClass()
-                                                .getSimpleName()
-                                                + "\n"
-                                                + String.valueOf(
-                                                e.getMessage()
-                                        )
-                                );
-                            }
-                        }
-                    }
-            );
-
-            mediaPlayer.setOnVideoSizeChangedListener(
-                    new MediaPlayer.OnVideoSizeChangedListener() {
-
-                        @Override
-                        public void onVideoSizeChanged(
-                                MediaPlayer mp,
-                                int width,
-                                int height
-                        ) {
-
-                            videoWidth = width;
-                            videoHeight = height;
-
-                            applyVideoTransform();
-                        }
-                    }
-            );
-
-            mediaPlayer.setOnCompletionListener(
-                    new MediaPlayer.OnCompletionListener() {
-
-                        @Override
-                        public void onCompletion(
-                                MediaPlayer mp
-                        ) {
-
-                            try {
-
-                                playPauseButton.setText(
-                                        "PLAY"
-                                );
-
-                                seekBar.setProgress(
-                                        0
-                                );
-
-                            } catch (Exception ignored) {
-                            }
-                        }
-                    }
-            );
-
-            mediaPlayer.setOnErrorListener(
-                    new MediaPlayer.OnErrorListener() {
-
-                        @Override
-                        public boolean onError(
-                                MediaPlayer mp,
-                                int what,
-                                int extra
-                        ) {
-
-                            prepared = false;
-
-                            showError(
-                                    "VIDEO PLAYBACK ERROR\n\n"
-                                            + "what = "
-                                            + what
-                                            + "\n"
-                                            + "extra = "
-                                            + extra
-                            );
-
-                            return true;
-                        }
-                    }
-            );
-
-            Uri uri =
-                    Uri.parse(
-                            videoUriString
-                    );
-
-            mediaPlayer.setDataSource(
-                    this,
-                    uri
-            );
-
-            mediaPlayer.prepareAsync();
-
-        } catch (Exception e) {
-
-            showError(
-                    "VIDEO PREPARE ERROR\n\n"
-                            + e.getClass()
-                            .getSimpleName()
-                            + "\n"
-                            + String.valueOf(
-                            e.getMessage()
-                    )
-            );
-        }
     }
 
     private void togglePlayPause() {
 
-        if (mediaPlayer == null
-                || !prepared
-                || !surfaceReady) {
+        if (videoView == null
+                || !prepared) {
 
             showError(
                     "वीडियो अभी तैयार नहीं है।"
@@ -808,9 +628,9 @@ public class VideoPlayerActivity extends Activity
 
         try {
 
-            if (mediaPlayer.isPlaying()) {
+            if (videoView.isPlaying()) {
 
-                mediaPlayer.pause();
+                videoView.pause();
 
                 playPauseButton.setText(
                         "PLAY"
@@ -818,7 +638,7 @@ public class VideoPlayerActivity extends Activity
 
             } else {
 
-                mediaPlayer.start();
+                videoView.start();
 
                 playPauseButton.setText(
                         "PAUSE"
@@ -841,7 +661,7 @@ public class VideoPlayerActivity extends Activity
 
     private void seekBackward() {
 
-        if (mediaPlayer == null
+        if (videoView == null
                 || !prepared) {
 
             return;
@@ -850,13 +670,16 @@ public class VideoPlayerActivity extends Activity
         try {
 
             int current =
-                    mediaPlayer.getCurrentPosition();
+                    videoView.getCurrentPosition();
 
-            mediaPlayer.seekTo(
+            int newPosition =
                     Math.max(
                             0,
                             current - 10000
-                    )
+                    );
+
+            videoView.seekTo(
+                    newPosition
             );
 
         } catch (Exception ignored) {
@@ -865,7 +688,7 @@ public class VideoPlayerActivity extends Activity
 
     private void seekForward() {
 
-        if (mediaPlayer == null
+        if (videoView == null
                 || !prepared) {
 
             return;
@@ -874,103 +697,23 @@ public class VideoPlayerActivity extends Activity
         try {
 
             int current =
-                    mediaPlayer.getCurrentPosition();
+                    videoView.getCurrentPosition();
 
             int duration =
-                    mediaPlayer.getDuration();
+                    videoView.getDuration();
 
-            mediaPlayer.seekTo(
+            int newPosition =
                     Math.min(
                             duration,
                             current + 10000
-                    )
+                    );
+
+            videoView.seekTo(
+                    newPosition
             );
 
         } catch (Exception ignored) {
         }
-    }
-
-    private void applyVideoTransform() {
-
-        if (textureView == null
-                || videoContainer == null
-                || videoWidth <= 0
-                || videoHeight <= 0) {
-
-            return;
-        }
-
-        int viewWidth =
-                videoContainer.getWidth();
-
-        int viewHeight =
-                videoContainer.getHeight();
-
-        if (viewWidth <= 0
-                || viewHeight <= 0) {
-
-            return;
-        }
-
-        float videoRatio =
-                (float) videoWidth
-                        / (float) videoHeight;
-
-        float containerRatio =
-                (float) viewWidth
-                        / (float) viewHeight;
-
-        float scale;
-
-        /*
-         * FIT CENTER:
-         * पूरा वीडियो दिखाई देगा।
-         * कोई हिस्सा crop नहीं होगा।
-         */
-
-        if (videoRatio > containerRatio) {
-
-            scale =
-                    (float) viewWidth
-                            / (float) videoWidth;
-
-        } else {
-
-            scale =
-                    (float) viewHeight
-                            / (float) videoHeight;
-        }
-
-        float scaledWidth =
-                videoWidth * scale;
-
-        float scaledHeight =
-                videoHeight * scale;
-
-        float dx =
-                (viewWidth - scaledWidth)
-                        / 2.0f;
-
-        float dy =
-                (viewHeight - scaledHeight)
-                        / 2.0f;
-
-        Matrix matrix =
-                new Matrix();
-
-        matrix.setScale(
-                scale,
-                scale
-        );
-
-        matrix.postTranslate(
-                dx,
-                dy
-        );
-
-        textureView.setTransform(
-                matrix
-        );
     }
 
     private String formatTime(
@@ -1011,6 +754,16 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
+    private LinearLayout.LayoutParams
+    buttonParams() {
+
+        return new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1.0f
+        );
+    }
+
     private void showError(
             String message
     ) {
@@ -1031,6 +784,9 @@ public class VideoPlayerActivity extends Activity
                     .setPositiveButton(
                             "OK",
                             null
+                    )
+                    .setCancelable(
+                            true
                     )
                     .show();
 
@@ -1053,7 +809,11 @@ public class VideoPlayerActivity extends Activity
                     )
                     .setPositiveButton(
                             "OK",
-                            (dialog, which) -> finish()
+                            (dialog, which) ->
+                                    finish()
+                    )
+                    .setCancelable(
+                            false
                     )
                     .show();
 
@@ -1065,14 +825,15 @@ public class VideoPlayerActivity extends Activity
 
     @Override
     protected void onPause() {
+
         super.onPause();
 
-        if (mediaPlayer != null) {
+        if (videoView != null) {
 
             try {
 
                 savedPosition =
-                        mediaPlayer.getCurrentPosition();
+                        videoView.getCurrentPosition();
 
             } catch (Exception ignored) {
             }
@@ -1088,34 +849,12 @@ public class VideoPlayerActivity extends Activity
                 progressRunnable
         );
 
-        if (mediaPlayer != null) {
+        if (videoView != null) {
 
             try {
-                mediaPlayer.stop();
+                videoView.stopPlayback();
             } catch (Exception ignored) {
             }
-
-            try {
-                mediaPlayer.reset();
-            } catch (Exception ignored) {
-            }
-
-            try {
-                mediaPlayer.release();
-            } catch (Exception ignored) {
-            }
-
-            mediaPlayer = null;
-        }
-
-        if (videoSurface != null) {
-
-            try {
-                videoSurface.release();
-            } catch (Exception ignored) {
-            }
-
-            videoSurface = null;
         }
 
         super.onDestroy();
