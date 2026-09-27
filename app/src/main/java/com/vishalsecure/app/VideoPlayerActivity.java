@@ -28,11 +28,6 @@ public class VideoPlayerActivity extends Activity
     private String videoUriString;
     private boolean surfaceReady = false;
 
-
-    // =========================================================
-    // ON CREATE
-    // =========================================================
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -43,91 +38,60 @@ public class VideoPlayerActivity extends Activity
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
+        // Allow both portrait and landscape
+        setRequestedOrientation(
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        );
+
         videoUriString = getIntent().getStringExtra("video_uri");
 
         if (videoUriString == null ||
                 videoUriString.trim().isEmpty()) {
-
-            showErrorAndClose(
-                    "Video file नहीं मिली।"
-            );
+            showErrorAndClose("Video file नहीं मिली।");
             return;
         }
 
         buildPlayerScreen();
     }
 
-
-    // =========================================================
-    // BUILD PLAYER SCREEN
-    // =========================================================
-
     private void buildPlayerScreen() {
 
-        FrameLayout root =
-                new FrameLayout(this);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(android.graphics.Color.BLACK);
 
-        root.setBackgroundColor(
-                android.graphics.Color.BLACK
-        );
+        surfaceView = new SurfaceView(this);
 
-
-        // -----------------------------------------------------
-        // SECURE SURFACE VIEW
-        // -----------------------------------------------------
-
-        surfaceView =
-                new SurfaceView(this);
-
+        // Keep secure window protection.
         surfaceView.setSecure(true);
+
         surfaceView.setKeepScreenOn(true);
 
-        surfaceHolder =
-                surfaceView.getHolder();
-
+        surfaceHolder = surfaceView.getHolder();
         surfaceHolder.addCallback(this);
 
-
+        /*
+         * The SurfaceView itself fills the screen,
+         * while MediaPlayer keeps the video's original
+         * aspect ratio.
+         */
         FrameLayout.LayoutParams surfaceParams =
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
                 );
 
-        surfaceParams.gravity =
-                Gravity.CENTER;
+        surfaceParams.gravity = Gravity.CENTER;
 
-        root.addView(
-                surfaceView,
-                surfaceParams
-        );
+        root.addView(surfaceView, surfaceParams);
 
-
-        // -----------------------------------------------------
-        // STATUS TEXT
-        // -----------------------------------------------------
-
-        statusText =
-                new TextView(this);
-
-        statusText.setText(
-                "Video loading..."
-        );
-
-        statusText.setTextColor(
-                android.graphics.Color.WHITE
-        );
-
+        statusText = new TextView(this);
+        statusText.setText("Video loading...");
+        statusText.setTextColor(android.graphics.Color.WHITE);
         statusText.setTextSize(16);
-
-        statusText.setGravity(
-                Gravity.CENTER
-        );
-
+        statusText.setGravity(Gravity.CENTER);
         statusText.setBackgroundColor(
                 android.graphics.Color.TRANSPARENT
         );
-
 
         FrameLayout.LayoutParams statusParams =
                 new FrameLayout.LayoutParams(
@@ -135,32 +99,14 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        statusParams.gravity =
-                Gravity.CENTER;
+        statusParams.gravity = Gravity.CENTER;
 
-        root.addView(
-                statusText,
-                statusParams
-        );
+        root.addView(statusText, statusParams);
 
-
-        // -----------------------------------------------------
-        // CLOSE BUTTON
-        // -----------------------------------------------------
-
-        closeButton =
-                new Button(this);
-
-        closeButton.setText(
-                "CLOSE"
-        );
-
+        closeButton = new Button(this);
+        closeButton.setText("CLOSE");
         closeButton.setAllCaps(false);
-
-        closeButton.setTextColor(
-                android.graphics.Color.WHITE
-        );
-
+        closeButton.setTextColor(android.graphics.Color.WHITE);
         closeButton.setBackgroundColor(
                 android.graphics.Color.DKGRAY
         );
@@ -168,7 +114,6 @@ public class VideoPlayerActivity extends Activity
         closeButton.setOnClickListener(
                 v -> finish()
         );
-
 
         FrameLayout.LayoutParams closeParams =
                 new FrameLayout.LayoutParams(
@@ -187,33 +132,20 @@ public class VideoPlayerActivity extends Activity
                 dp(20)
         );
 
-        root.addView(
-                closeButton,
-                closeParams
-        );
-
+        root.addView(closeButton, closeParams);
 
         setContentView(root);
     }
 
-
-    // =========================================================
-    // SURFACE CREATED
-    // =========================================================
-
     @Override
-    public void surfaceCreated(
-            SurfaceHolder holder) {
+    public void surfaceCreated(SurfaceHolder holder) {
 
         surfaceReady = true;
 
+        surfaceHolder = holder;
+
         startVideo();
     }
-
-
-    // =========================================================
-    // SURFACE CHANGED
-    // =========================================================
 
     @Override
     public void surfaceChanged(
@@ -225,39 +157,28 @@ public class VideoPlayerActivity extends Activity
         surfaceHolder = holder;
 
         if (mediaPlayer != null) {
+
             try {
-                mediaPlayer.setDisplay(
-                        surfaceHolder
-                );
+                mediaPlayer.setDisplay(surfaceHolder);
             } catch (Exception ignored) {
             }
         }
     }
 
-
-    // =========================================================
-    // SURFACE DESTROYED
-    // =========================================================
-
     @Override
-    public void surfaceDestroyed(
-            SurfaceHolder holder) {
+    public void surfaceDestroyed(SurfaceHolder holder) {
 
         surfaceReady = false;
 
         releasePlayer();
     }
 
-
-    // =========================================================
-    // START VIDEO
-    // =========================================================
-
     private void startVideo() {
 
         if (!surfaceReady ||
                 surfaceHolder == null ||
                 videoUriString == null) {
+
             return;
         }
 
@@ -268,34 +189,37 @@ public class VideoPlayerActivity extends Activity
             Uri videoUri =
                     Uri.parse(videoUriString);
 
-            mediaPlayer =
-                    new MediaPlayer();
+            mediaPlayer = new MediaPlayer();
 
             mediaPlayer.setAudioStreamType(
                     AudioManager.STREAM_MUSIC
             );
 
-            mediaPlayer.setScreenOnWhilePlaying(
-                    true
-            );
+            mediaPlayer.setScreenOnWhilePlaying(true);
 
-            mediaPlayer.setDisplay(
-                    surfaceHolder
-            );
-
+            /*
+             * Important:
+             * MediaPlayer handles the video's native
+             * rotation metadata and aspect ratio.
+             */
+            mediaPlayer.setDisplay(surfaceHolder);
 
             mediaPlayer.setOnPreparedListener(
                     mp -> {
 
                         try {
 
-                            mp.setDisplay(
-                                    surfaceHolder
-                            );
+                            mp.setDisplay(surfaceHolder);
 
+                            /*
+                             * Do NOT manually stretch the video.
+                             * Android/MediaPlayer keeps its native
+                             * video proportions.
+                             */
                             mp.start();
 
                             if (statusText != null) {
+
                                 statusText.setVisibility(
                                         View.GONE
                                 );
@@ -310,11 +234,11 @@ public class VideoPlayerActivity extends Activity
                     }
             );
 
-
             mediaPlayer.setOnCompletionListener(
                     mp -> {
 
                         if (statusText != null) {
+
                             statusText.setText(
                                     "Video समाप्त"
                             );
@@ -326,7 +250,6 @@ public class VideoPlayerActivity extends Activity
                     }
             );
 
-
             mediaPlayer.setOnErrorListener(
                     (mp, what, extra) -> {
 
@@ -337,7 +260,6 @@ public class VideoPlayerActivity extends Activity
                         return true;
                     }
             );
-
 
             mediaPlayer.setDataSource(
                     this,
@@ -354,11 +276,6 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-
-    // =========================================================
-    // PAUSE
-    // =========================================================
-
     @Override
     protected void onPause() {
 
@@ -369,6 +286,7 @@ public class VideoPlayerActivity extends Activity
             try {
 
                 if (mediaPlayer.isPlaying()) {
+
                     mediaPlayer.pause();
                 }
 
@@ -376,11 +294,6 @@ public class VideoPlayerActivity extends Activity
             }
         }
     }
-
-
-    // =========================================================
-    // RESUME
-    // =========================================================
 
     @Override
     protected void onResume() {
@@ -393,6 +306,7 @@ public class VideoPlayerActivity extends Activity
             try {
 
                 if (!mediaPlayer.isPlaying()) {
+
                     mediaPlayer.start();
                 }
 
@@ -400,11 +314,6 @@ public class VideoPlayerActivity extends Activity
             }
         }
     }
-
-
-    // =========================================================
-    // RELEASE PLAYER
-    // =========================================================
 
     private void releasePlayer() {
 
@@ -429,21 +338,13 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-
-    // =========================================================
-    // ERROR
-    // =========================================================
-
-    private void showError(
-            String message) {
+    private void showError(String message) {
 
         runOnUiThread(() -> {
 
             if (statusText != null) {
 
-                statusText.setText(
-                        message
-                );
+                statusText.setText(message);
 
                 statusText.setVisibility(
                         View.VISIBLE
@@ -452,13 +353,7 @@ public class VideoPlayerActivity extends Activity
         });
     }
 
-
-    // =========================================================
-    // ERROR AND CLOSE
-    // =========================================================
-
-    private void showErrorAndClose(
-            String message) {
+    private void showErrorAndClose(String message) {
 
         new AlertDialog.Builder(this)
                 .setTitle("Vishal Secure")
@@ -471,11 +366,6 @@ public class VideoPlayerActivity extends Activity
                 .show();
     }
 
-
-    // =========================================================
-    // ON DESTROY
-    // =========================================================
-
     @Override
     protected void onDestroy() {
 
@@ -483,11 +373,6 @@ public class VideoPlayerActivity extends Activity
 
         super.onDestroy();
     }
-
-
-    // =========================================================
-    // DP
-    // =========================================================
 
     private int dp(int value) {
 
