@@ -64,10 +64,15 @@ public class VideoPlayerActivity extends Activity
 
                                 if (duration > 0) {
 
-                                    seekBar.setMax(duration);
+                                    seekBar.setMax(1000);
+
+                                    int progress =
+                                            (int)
+                                            ((position * 1000L)
+                                                    / duration);
 
                                     seekBar.setProgress(
-                                            position
+                                            progress
                                     );
 
                                     updateTimeText(
@@ -93,9 +98,7 @@ public class VideoPlayerActivity extends Activity
         super.onCreate(savedInstanceState);
 
         /*
-         * Secure screen:
-         * screenshots and normal screen recording
-         * are blocked by Android's secure-window flag.
+         * Secure screen.
          */
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
@@ -211,9 +214,9 @@ public class VideoPlayerActivity extends Activity
 
         controls.setPadding(
                 dp(10),
-                dp(8),
+                dp(6),
                 dp(10),
-                dp(8)
+                dp(6)
         );
 
         controls.setBackgroundColor(
@@ -233,15 +236,12 @@ public class VideoPlayerActivity extends Activity
 
         seekBar.setMax(1000);
 
-        LinearLayout.LayoutParams seekParams =
+        controls.addView(
+                seekBar,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         dp(35)
-                );
-
-        controls.addView(
-                seekBar,
-                seekParams
+                )
         );
 
         /*
@@ -259,7 +259,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * BACK 10 SECONDS
+         * -10 SECONDS
          */
         backButton =
                 new Button(this);
@@ -309,7 +309,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * FORWARD 10 SECONDS
+         * +10 SECONDS
          */
         forwardButton =
                 new Button(this);
@@ -367,7 +367,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * TIME TEXT
+         * TIME
          */
         timeText =
                 new TextView(this);
@@ -390,12 +390,12 @@ public class VideoPlayerActivity extends Activity
                 timeText,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        dp(30)
+                        dp(28)
                 )
         );
 
         /*
-         * Put controls at bottom.
+         * Controls at bottom.
          */
         FrameLayout.LayoutParams controlParams =
                 new FrameLayout.LayoutParams(
@@ -412,7 +412,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * SEEK BAR LISTENER
+         * SEEK BAR
          */
         seekBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -515,6 +515,15 @@ public class VideoPlayerActivity extends Activity
                         surfaceHolder
                 );
 
+                /*
+                 * Recalculate video size whenever
+                 * phone orientation changes.
+                 */
+                adjustVideoSize(
+                        mediaPlayer.getVideoWidth(),
+                        mediaPlayer.getVideoHeight()
+                );
+
             } catch (Exception ignored) {
             }
         }
@@ -562,9 +571,6 @@ public class VideoPlayerActivity extends Activity
                     surfaceHolder
             );
 
-            /*
-             * VIDEO PREPARED
-             */
             mediaPlayer.setOnPreparedListener(
                     mp -> {
 
@@ -574,30 +580,13 @@ public class VideoPlayerActivity extends Activity
                                     surfaceHolder
                             );
 
-                            /*
-                             * Get actual video dimensions.
-                             */
-                            int videoWidth =
-                                    mp.getVideoWidth();
-
-                            int videoHeight =
-                                    mp.getVideoHeight();
-
-                            /*
-                             * Resize the SurfaceView
-                             * without stretching the video.
-                             */
                             adjustVideoSize(
-                                    videoWidth,
-                                    videoHeight
+                                    mp.getVideoWidth(),
+                                    mp.getVideoHeight()
                             );
 
                             int duration =
                                     mp.getDuration();
-
-                            seekBar.setMax(
-                                    1000
-                            );
 
                             updateTimeText(
                                     0,
@@ -623,9 +612,6 @@ public class VideoPlayerActivity extends Activity
                     }
             );
 
-            /*
-             * VIDEO COMPLETED
-             */
             mediaPlayer.setOnCompletionListener(
                     mp -> {
 
@@ -649,9 +635,6 @@ public class VideoPlayerActivity extends Activity
                     }
             );
 
-            /*
-             * VIDEO ERROR
-             */
             mediaPlayer.setOnErrorListener(
                     (mp, what, extra) -> {
 
@@ -683,11 +666,14 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * IMPORTANT:
+     * FULL-SCREEN VIDEO
      *
-     * SurfaceView is resized according to the
-     * video's original width/height.
+     * The video keeps its original proportions.
+     * Instead of making the whole video smaller,
+     * it fills the available screen.
      *
+     * If the screen and video have different
+     * proportions, the excess part is cropped.
      * This prevents faces from becoming stretched.
      */
     private void adjustVideoSize(
@@ -695,14 +681,11 @@ public class VideoPlayerActivity extends Activity
             int videoHeight) {
 
         if (videoWidth <= 0 ||
-                videoHeight <= 0) {
+                videoHeight <= 0 ||
+                surfaceView == null) {
 
             return;
         }
-
-        FrameLayout.LayoutParams params =
-                (FrameLayout.LayoutParams)
-                        surfaceView.getLayoutParams();
 
         int screenWidth =
                 getResources()
@@ -713,6 +696,12 @@ public class VideoPlayerActivity extends Activity
                 getResources()
                         .getDisplayMetrics()
                         .heightPixels;
+
+        if (screenWidth <= 0 ||
+                screenHeight <= 0) {
+
+            return;
+        }
 
         float videoRatio =
                 (float) videoWidth /
@@ -726,30 +715,47 @@ public class VideoPlayerActivity extends Activity
         int finalHeight;
 
         /*
-         * FIT INSIDE SCREEN
+         * CENTER-CROP:
          *
-         * The video is never stretched.
+         * Fill the complete screen while
+         * preserving the original video ratio.
          */
         if (videoRatio > screenRatio) {
 
-            finalWidth =
-                    screenWidth;
-
-            finalHeight =
-                    (int)
-                    (screenWidth /
-                            videoRatio);
-
-        } else {
-
+            /*
+             * Video is wider than screen.
+             * Height fills screen and width becomes
+             * larger than screen.
+             */
             finalHeight =
                     screenHeight;
 
             finalWidth =
-                    (int)
-                    (screenHeight *
-                            videoRatio);
+                    Math.round(
+                            screenHeight *
+                                    videoRatio
+                    );
+
+        } else {
+
+            /*
+             * Video is taller than screen.
+             * Width fills screen and height becomes
+             * larger than screen.
+             */
+            finalWidth =
+                    screenWidth;
+
+            finalHeight =
+                    Math.round(
+                            screenWidth /
+                                    videoRatio
+                    );
         }
+
+        FrameLayout.LayoutParams params =
+                (FrameLayout.LayoutParams)
+                        surfaceView.getLayoutParams();
 
         params.width =
                 finalWidth;
@@ -916,15 +922,10 @@ public class VideoPlayerActivity extends Activity
 
         super.onResume();
 
-        if (surfaceReady &&
-                mediaPlayer != null) {
-
-            /*
-             * Do not automatically restart after
-             * a configuration change unless the
-             * player is already prepared.
-             */
-        }
+        /*
+         * Video will not unexpectedly restart
+         * after rotation.
+         */
     }
 
     private void releasePlayer() {
