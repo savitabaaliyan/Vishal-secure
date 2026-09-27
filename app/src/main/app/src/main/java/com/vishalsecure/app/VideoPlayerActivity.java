@@ -2,10 +2,10 @@ package com.vishalsecure.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -27,6 +27,7 @@ public class VideoPlayerActivity extends Activity
         implements TextureView.SurfaceTextureListener {
 
     private TextureView textureView;
+    private Surface videoSurface;
     private MediaPlayer mediaPlayer;
 
     private TextView statusText;
@@ -41,18 +42,16 @@ public class VideoPlayerActivity extends Activity
 
     private String videoUriString;
 
-    private Surface videoSurface;
-
     private boolean textureReady = false;
     private boolean videoPrepared = false;
     private boolean userSeeking = false;
 
     private boolean shouldResumeAfterSurface = false;
 
+    private int savedPosition = 0;
+
     private int videoWidth = 0;
     private int videoHeight = 0;
-
-    private int savedPosition = 0;
 
     private final Handler handler =
             new Handler();
@@ -110,20 +109,10 @@ public class VideoPlayerActivity extends Activity
 
         super.onCreate(savedInstanceState);
 
-        /*
-         * ========================================================
-         * SECURITY
-         * ========================================================
-         */
-
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
         );
-
-        /*
-         * Allow portrait + landscape.
-         */
 
         setRequestedOrientation(
                 ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -147,12 +136,6 @@ public class VideoPlayerActivity extends Activity
         buildPlayerScreen();
     }
 
-    /*
-     * ============================================================
-     * BUILD SCREEN
-     * ============================================================
-     */
-
     private void buildPlayerScreen() {
 
         LinearLayout root =
@@ -167,11 +150,13 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * ========================================================
-         * VIDEO CONTAINER
-         * ========================================================
+         * =====================================================
+         * VIDEO AREA
+         * =====================================================
+         *
+         * यह हिस्सा controls से पूरी तरह अलग है।
+         * इसलिए controls video के ऊपर नहीं आएंगे।
          */
-
         FrameLayout videoContainer =
                 new FrameLayout(this);
 
@@ -179,30 +164,8 @@ public class VideoPlayerActivity extends Activity
                 Color.BLACK
         );
 
-        LinearLayout.LayoutParams videoContainerParams =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        0
-                );
-
-        videoContainerParams.weight = 1f;
-
-        /*
-         * ========================================================
-         * TEXTURE VIEW
-         * ========================================================
-         */
-
         textureView =
                 new TextureView(this);
-
-        /*
-         * SECURITY
-         *
-         * Secure SurfaceTexture prevents protected
-         * content from appearing in screenshots /
-         * supported screen-capture paths.
-         */
 
         textureView.setSecure(true);
 
@@ -225,12 +188,6 @@ public class VideoPlayerActivity extends Activity
                 textureView,
                 textureParams
         );
-
-        /*
-         * ========================================================
-         * STATUS
-         * ========================================================
-         */
 
         statusText =
                 new TextView(this);
@@ -263,17 +220,28 @@ public class VideoPlayerActivity extends Activity
                 statusParams
         );
 
+        /*
+         * Video area बाकी available screen लेगा।
+         * नीचे controls के लिए अलग जगह रहेगी।
+         */
+        LinearLayout.LayoutParams videoParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        0
+                );
+
+        videoParams.weight = 1f;
+
         root.addView(
                 videoContainer,
-                videoContainerParams
+                videoParams
         );
 
         /*
-         * ========================================================
-         * CONTROL PANEL
-         * ========================================================
+         * =====================================================
+         * CONTROL AREA
+         * =====================================================
          */
-
         LinearLayout controls =
                 new LinearLayout(this);
 
@@ -295,7 +263,6 @@ public class VideoPlayerActivity extends Activity
         /*
          * SEEK BAR
          */
-
         seekBar =
                 new SeekBar(this);
 
@@ -312,7 +279,6 @@ public class VideoPlayerActivity extends Activity
         /*
          * BUTTON ROW
          */
-
         LinearLayout buttonRow =
                 new LinearLayout(this);
 
@@ -325,9 +291,8 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * BACK
+         * -10 SEC
          */
-
         backButton =
                 new Button(this);
 
@@ -351,9 +316,8 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * PLAY
+         * PLAY / PAUSE
          */
-
         playPauseButton =
                 new Button(this);
 
@@ -377,9 +341,8 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * FORWARD
+         * +10 SEC
          */
-
         forwardButton =
                 new Button(this);
 
@@ -405,7 +368,6 @@ public class VideoPlayerActivity extends Activity
         /*
          * CLOSE
          */
-
         closeButton =
                 new Button(this);
 
@@ -439,7 +401,6 @@ public class VideoPlayerActivity extends Activity
         /*
          * TIME
          */
-
         timeText =
                 new TextView(this);
 
@@ -465,6 +426,9 @@ public class VideoPlayerActivity extends Activity
                 )
         );
 
+        /*
+         * Controls अब root के नीचे अलग area में हैं।
+         */
         root.addView(
                 controls,
                 new LinearLayout.LayoutParams(
@@ -474,9 +438,8 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * SEEK LISTENER
+         * SEEK BAR LISTENER
          */
-
         seekBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
 
@@ -556,14 +519,14 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
-     * TEXTURE CREATED
-     * ============================================================
+     * =========================================================
+     * TEXTURE SURFACE
+     * =========================================================
      */
 
     @Override
     public void onSurfaceTextureAvailable(
-            android.graphics.SurfaceTexture surfaceTexture,
+            SurfaceTexture surfaceTexture,
             int width,
             int height) {
 
@@ -595,32 +558,22 @@ public class VideoPlayerActivity extends Activity
                 }
             }
 
+            applyVideoTransform(
+                    width,
+                    height
+            );
+
             return;
         }
 
         startVideo();
     }
 
-    /*
-     * ============================================================
-     * TEXTURE SIZE CHANGED
-     * ============================================================
-     */
-
     @Override
     public void onSurfaceTextureSizeChanged(
-            android.graphics.SurfaceTexture surfaceTexture,
+            SurfaceTexture surfaceTexture,
             int width,
             int height) {
-
-        /*
-         * THIS IS THE IMPORTANT PART.
-         *
-         * Every time the phone rotates, TextureView
-         * gives us the NEW width and height.
-         *
-         * We then recalculate the video transform.
-         */
 
         if (videoPrepared) {
 
@@ -631,21 +584,11 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * ============================================================
-     * TEXTURE DESTROYED
-     * ============================================================
-     */
-
     @Override
     public boolean onSurfaceTextureDestroyed(
-            android.graphics.SurfaceTexture surfaceTexture) {
+            SurfaceTexture surfaceTexture) {
 
         textureReady = false;
-
-        /*
-         * Save exact current position.
-         */
 
         if (mediaPlayer != null
                 && videoPrepared) {
@@ -679,34 +622,16 @@ public class VideoPlayerActivity extends Activity
             videoSurface = null;
         }
 
-        /*
-         * DO NOT release MediaPlayer.
-         *
-         * This is what preserves the video position.
-         */
-
         return true;
     }
 
-    /*
-     * ============================================================
-     * TEXTURE UPDATED
-     * ============================================================
-     */
-
     @Override
     public void onSurfaceTextureUpdated(
-            android.graphics.SurfaceTexture surfaceTexture) {
+            SurfaceTexture surfaceTexture) {
     }
 
-    /*
-     * ============================================================
-     * CREATE SURFACE
-     * ============================================================
-     */
-
     private void createVideoSurface(
-            android.graphics.SurfaceTexture surfaceTexture) {
+            SurfaceTexture surfaceTexture) {
 
         try {
 
@@ -727,9 +652,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
+     * =========================================================
      * START VIDEO
-     * ============================================================
+     * =========================================================
      */
 
     private void startVideo() {
@@ -759,10 +684,6 @@ public class VideoPlayerActivity extends Activity
                     true
             );
 
-            /*
-             * Give MediaPlayer our TextureView surface.
-             */
-
             mediaPlayer.setSurface(
                     videoSurface
             );
@@ -779,10 +700,6 @@ public class VideoPlayerActivity extends Activity
 
                             videoHeight =
                                     mp.getVideoHeight();
-
-                            /*
-                             * Exact video dimensions are now known.
-                             */
 
                             applyVideoTransform();
 
@@ -867,9 +784,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
-     * ATTACH EXISTING PLAYER
-     * ============================================================
+     * =========================================================
+     * RE-ATTACH EXISTING PLAYER AFTER ROTATION
+     * =========================================================
      */
 
     private void attachExistingPlayer() {
@@ -889,10 +806,6 @@ public class VideoPlayerActivity extends Activity
 
             applyVideoTransform();
 
-            /*
-             * Restore exact position.
-             */
-
             if (savedPosition > 0) {
 
                 mediaPlayer.seekTo(
@@ -905,26 +818,26 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
-     * VIDEO TRANSFORM
-     * ============================================================
+     * =========================================================
+     * VIDEO FIT CENTER
+     * =========================================================
      *
-     * FIT CENTER
+     * यह सबसे महत्वपूर्ण हिस्सा है।
      *
-     * पूरे video को दिखाता है।
-     * कोई हिस्सा crop नहीं होता।
-     * Video stretch नहीं होती।
+     * Video को पूरे उपलब्ध VIDEO AREA के अंदर fit किया जाता है।
      *
-     * अगर aspect ratio अलग है तो black space
-     * दिखाई देना normal है।
+     * - crop नहीं
+     * - stretch नहीं
+     * - distortion नहीं
+     * - controls के पीछे video नहीं जाएगा
+     *
+     * अगर video और phone का aspect ratio अलग है,
+     * तो black space रह सकती है।
      */
 
     private void applyVideoTransform() {
 
-        if (textureView == null
-                || videoWidth <= 0
-                || videoHeight <= 0) {
-
+        if (textureView == null) {
             return;
         }
 
@@ -960,14 +873,12 @@ public class VideoPlayerActivity extends Activity
         /*
          * FIT CENTER
          */
-
         if (videoRatio > viewRatio) {
 
             /*
-             * Video is wider.
-             * Fit by width.
+             * Video ज्यादा चौड़ा है।
+             * Width पूरी available width लेगी।
              */
-
             scale =
                     (float) viewWidth
                             / (float) videoWidth;
@@ -975,10 +886,9 @@ public class VideoPlayerActivity extends Activity
         } else {
 
             /*
-             * Video is taller.
-             * Fit by height.
+             * Video ज्यादा लंबा है।
+             * Height पूरी available height लेगी।
              */
-
             scale =
                     (float) viewHeight
                             / (float) videoHeight;
@@ -1017,9 +927,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
+     * =========================================================
      * PLAY / PAUSE
-     * ============================================================
+     * =========================================================
      */
 
     private void togglePlayPause() {
@@ -1054,9 +964,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
-     * BACKWARD
-     * ============================================================
+     * =========================================================
+     * SEEK BACKWARD
+     * =========================================================
      */
 
     private void seekBackward() {
@@ -1084,9 +994,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
-     * FORWARD
-     * ============================================================
+     * =========================================================
+     * SEEK FORWARD
+     * =========================================================
      */
 
     private void seekForward() {
@@ -1117,9 +1027,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
+     * =========================================================
      * TIME
-     * ============================================================
+     * =========================================================
      */
 
     private void updateTimeText(
@@ -1161,9 +1071,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
-     * PAUSE
-     * ============================================================
+     * =========================================================
+     * PAUSE / ROTATION
+     * =========================================================
      */
 
     @Override
@@ -1187,26 +1097,16 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * ============================================================
-     * RESUME
-     * ============================================================
-     */
-
     @Override
     protected void onResume() {
 
         super.onResume();
-
-        /*
-         * TextureView callbacks handle rotation.
-         */
     }
 
     /*
-     * ============================================================
+     * =========================================================
      * DESTROY
-     * ============================================================
+     * =========================================================
      */
 
     @Override
@@ -1220,12 +1120,6 @@ public class VideoPlayerActivity extends Activity
 
         super.onDestroy();
     }
-
-    /*
-     * ============================================================
-     * RELEASE
-     * ============================================================
-     */
 
     private void releasePlayer() {
 
@@ -1265,9 +1159,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
+     * =========================================================
      * ERROR
-     * ============================================================
+     * =========================================================
      */
 
     private void showError(
@@ -1310,9 +1204,9 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * ============================================================
+     * =========================================================
      * DP
-     * ============================================================
+     * =========================================================
      */
 
     private int dp(int value) {
