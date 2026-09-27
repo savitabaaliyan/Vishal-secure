@@ -1,18 +1,79 @@
 package com.vishalsecure.app;
 
 import android.app.Activity;
-import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.net.Uri;
+import android.graphics.Color;
 import android.view.Gravity;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.VideoView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Button;
+import android.widget.SeekBar;
+import android.media.MediaPlayer;
 
-public class VideoPlayerActivity extends Activity {
+public class VideoPlayerActivity extends Activity
+        implements SurfaceHolder.Callback {
 
-    private VideoView videoView;
+    private FrameLayout rootLayout;
+    private SurfaceView surfaceView;
+    private SurfaceHolder surfaceHolder;
+
+    private MediaPlayer mediaPlayer;
+
+    private SeekBar seekBar;
+    private TextView timeText;
+
+    private Handler handler = new Handler();
+
+    private boolean videoPrepared = false;
+    private boolean shouldResumeAfterSurface = false;
+    private boolean userPaused = false;
+
+    private Uri videoUri;
+
+    private final Runnable progressRunnable =
+            new Runnable() {
+                @Override
+                public void run() {
+
+                    if (mediaPlayer != null &&
+                            videoPrepared) {
+
+                        try {
+
+                            int position =
+                                    mediaPlayer.getCurrentPosition();
+
+                            int duration =
+                                    mediaPlayer.getDuration();
+
+                            if (duration > 0) {
+
+                                seekBar.setMax(duration);
+                                seekBar.setProgress(position);
+
+                                updateTimeText(
+                                        position,
+                                        duration
+                                );
+                            }
+
+                        } catch (Exception ignored) {
+                        }
+                    }
+
+                    handler.postDelayed(
+                            this,
+                            500
+                    );
+                }
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -23,63 +84,73 @@ public class VideoPlayerActivity extends Activity {
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        buildPlayerScreen();
 
-        videoView = new VideoView(this);
+        String uriString =
+                getIntent().getStringExtra(
+                        "video_uri"
+                );
 
-        FrameLayout.LayoutParams videoParams =
+        if (uriString == null ||
+                uriString.isEmpty()) {
+
+            finish();
+            return;
+        }
+
+        videoUri =
+                Uri.parse(uriString);
+
+        surfaceView
+                .getHolder()
+                .addCallback(this);
+
+        surfaceView.setSecure(true);
+
+        handler.post(progressRunnable);
+    }
+
+    private void buildPlayerScreen() {
+
+        rootLayout =
+                new FrameLayout(this);
+
+        rootLayout.setBackgroundColor(
+                Color.BLACK
+        );
+
+        surfaceView =
+                new SurfaceView(this);
+
+        surfaceView.setSecure(true);
+
+        FrameLayout.LayoutParams
+                surfaceParams =
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
                 );
 
-        videoParams.gravity = Gravity.CENTER;
-        root.addView(videoView, videoParams);
+        surfaceParams.gravity =
+                Gravity.CENTER;
 
-        Button closeButton = new Button(this);
-        closeButton.setText("CLOSE");
+        rootLayout.addView(
+                surfaceView,
+                surfaceParams
+        );
 
-        closeButton.setOnClickListener(v -> finish());
+        LinearLayout controls =
+                new LinearLayout(this);
 
-        FrameLayout.LayoutParams buttonParams =
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
-                );
+        controls.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
 
-        buttonParams.gravity =
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        controls.setGravity(
+                Gravity.CENTER
+        );
 
-        root.addView(closeButton, buttonParams);
-
-        setContentView(root);
-
-        String videoUri =
-                getIntent().getStringExtra("video_uri");
-
-        if (videoUri == null || videoUri.trim().isEmpty()) {
-            finish();
-            return;
-        }
-
-        videoView.setOnPreparedListener(mp -> {
-            videoView.requestFocus();
-            videoView.start();
-        });
-
-        videoView.setVideoURI(Uri.parse(videoUri));
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (videoView != null) {
-            try {
-                videoView.stopPlayback();
-            } catch (Exception ignored) {
-            }
-        }
-
-        super.onDestroy();
-    }
-}
+        controls.setPadding(
+                12,
+                8,
+               
