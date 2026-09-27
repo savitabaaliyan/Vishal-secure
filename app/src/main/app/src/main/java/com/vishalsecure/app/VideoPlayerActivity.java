@@ -796,72 +796,117 @@ public class VideoPlayerActivity extends Activity
     }
 
     private void applyVideoTransform(
-            int viewWidth,
-            int viewHeight) {
+        int viewWidth,
+        int viewHeight) {
 
-        if (textureView == null
-                || videoWidth <= 0
-                || videoHeight <= 0
-                || viewWidth <= 0
-                || viewHeight <= 0) {
+    if (textureView == null
+            || videoWidth <= 0
+            || videoHeight <= 0
+            || viewWidth <= 0
+            || viewHeight <= 0) {
 
-            return;
+        return;
+    }
+
+    float displayWidth = videoWidth;
+    float displayHeight = videoHeight;
+
+    if (videoRotation == 90
+            || videoRotation == 270) {
+
+        displayWidth = videoHeight;
+        displayHeight = videoWidth;
+    }
+
+    float videoRatio =
+            displayWidth / displayHeight;
+
+    float viewRatio =
+            (float) viewWidth / (float) viewHeight;
+
+    float scale;
+
+    /*
+     * PORTRAIT = video बीच में, पूरा दिखाई दे
+     * LANDSCAPE = video पूरा screen area भरे
+     */
+    if (viewWidth > viewHeight) {
+
+        /*
+         * LANDSCAPE - FULL SCREEN
+         */
+        if (videoRatio > viewRatio) {
+
+            scale =
+                    (float) viewHeight
+                            / displayHeight;
+
+        } else {
+
+            scale =
+                    (float) viewWidth
+                            / displayWidth;
         }
 
-        float videoRatio =
-                (float) videoWidth
-                        / (float) videoHeight;
+    } else {
 
-        float viewRatio =
-                (float) viewWidth
-                        / (float) viewHeight;
-
-        float scale;
-
+        /*
+         * PORTRAIT - CENTER / FIT
+         */
         if (videoRatio > viewRatio) {
 
             scale =
                     (float) viewWidth
-                            / (float) videoWidth;
+                            / displayWidth;
 
         } else {
 
             scale =
                     (float) viewHeight
-                            / (float) videoHeight;
+                            / displayHeight;
         }
+    }
 
-        float scaledWidth =
-                videoWidth * scale;
+    float scaledWidth =
+            displayWidth * scale;
 
-        float scaledHeight =
-                videoHeight * scale;
+    float scaledHeight =
+            displayHeight * scale;
 
-        float dx =
-                (viewWidth - scaledWidth)
-                        / 2f;
+    float dx =
+            (viewWidth - scaledWidth) / 2f;
 
-        float dy =
-                (viewHeight - scaledHeight)
-                        / 2f;
+    float dy =
+            (viewHeight - scaledHeight) / 2f;
 
-        Matrix matrix =
-                new Matrix();
+    Matrix matrix =
+            new Matrix();
 
-        matrix.setScale(
-                scale,
-                scale
-        );
+    if (videoRotation != 0) {
 
-        matrix.postTranslate(
-                dx,
-                dy
-        );
-
-        textureView.setTransform(
-                matrix
+        matrix.postRotate(
+                videoRotation,
+                viewWidth / 2f,
+                viewHeight / 2f
         );
     }
+
+    matrix.postScale(
+            scale,
+            scale,
+            viewWidth / 2f,
+            viewHeight / 2f
+    );
+
+    matrix.postTranslate(
+            dx,
+            dy
+    );
+
+    textureView.setTransform(
+            matrix
+    );
+}
 
     private void togglePlayPause() {
 
