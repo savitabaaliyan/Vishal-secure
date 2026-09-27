@@ -8,11 +8,9 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.MediaController;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.VideoView;
@@ -20,6 +18,7 @@ import android.widget.VideoView;
 public class VideoPlayerActivity extends Activity {
 
     private VideoView videoView;
+
     private TextView statusText;
     private TextView timeText;
 
@@ -113,10 +112,16 @@ public class VideoPlayerActivity extends Activity {
                 savedInstanceState
         );
 
-        getWindow().setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE
-        );
+        /*
+         * IMPORTANT:
+         *
+         * इस TEST version में FLAG_SECURE
+         * जानबूझकर नहीं लगाया गया है।
+         *
+         * इसका उद्देश्य केवल यह पता लगाना है
+         * कि black video का कारण security layer
+         * है या नहीं।
+         */
 
         videoUriString =
                 getIntent().getStringExtra(
@@ -189,13 +194,9 @@ public class VideoPlayerActivity extends Activity {
         );
 
         /*
-         * FIT CENTER:
-         * पूरा वीडियो दिखाई देगा।
-         * वीडियो crop नहीं होगी।
+         * VideoView पूरा available area लेगी।
+         * Android खुद video aspect ratio संभालेगा।
          */
-
-        videoView.setScaleX(1.0f);
-        videoView.setScaleY(1.0f);
 
         FrameLayout.LayoutParams
                 videoParams =
@@ -211,6 +212,10 @@ public class VideoPlayerActivity extends Activity {
                 videoView,
                 videoParams
         );
+
+        /*
+         * STATUS
+         */
 
         statusText =
                 new TextView(this);
@@ -390,7 +395,7 @@ public class VideoPlayerActivity extends Activity {
         );
 
         /*
-         * VIDEO URI
+         * VIDEO SOURCE
          */
 
         try {
@@ -441,11 +446,6 @@ public class VideoPlayerActivity extends Activity {
                                 duration
                         );
 
-                        /*
-                         * Rotation या पुनः खोलने पर
-                         * पिछली position पर जाएँ।
-                         */
-
                         if (savedPosition > 0) {
 
                             videoView.seekTo(
@@ -473,7 +473,7 @@ public class VideoPlayerActivity extends Activity {
         );
 
         /*
-         * VIDEO ERROR
+         * ERROR
          */
 
         videoView.setOnErrorListener(
@@ -672,14 +672,11 @@ public class VideoPlayerActivity extends Activity {
             int current =
                     videoView.getCurrentPosition();
 
-            int newPosition =
+            videoView.seekTo(
                     Math.max(
                             0,
                             current - 10000
-                    );
-
-            videoView.seekTo(
-                    newPosition
+                    )
             );
 
         } catch (Exception ignored) {
@@ -688,188 +685,4 @@ public class VideoPlayerActivity extends Activity {
 
     private void seekForward() {
 
-        if (videoView == null
-                || !prepared) {
-
-            return;
-        }
-
-        try {
-
-            int current =
-                    videoView.getCurrentPosition();
-
-            int duration =
-                    videoView.getDuration();
-
-            int newPosition =
-                    Math.min(
-                            duration,
-                            current + 10000
-                    );
-
-            videoView.seekTo(
-                    newPosition
-            );
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    private String formatTime(
-            int milliseconds
-    ) {
-
-        int totalSeconds =
-                Math.max(
-                        0,
-                        milliseconds / 1000
-                );
-
-        int hours =
-                totalSeconds / 3600;
-
-        int minutes =
-                (totalSeconds % 3600) / 60;
-
-        int seconds =
-                totalSeconds % 60;
-
-        if (hours > 0) {
-
-            return String.format(
-                    "%02d:%02d:%02d",
-                    hours,
-                    minutes,
-                    seconds
-            );
-
-        } else {
-
-            return String.format(
-                    "%02d:%02d",
-                    minutes,
-                    seconds
-            );
-        }
-    }
-
-    private LinearLayout.LayoutParams
-    buttonParams() {
-
-        return new LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1.0f
-        );
-    }
-
-    private void showError(
-            String message
-    ) {
-
-        if (destroyed) {
-            return;
-        }
-
-        try {
-
-            new AlertDialog.Builder(this)
-                    .setTitle(
-                            "Vishal Secure"
-                    )
-                    .setMessage(
-                            message
-                    )
-                    .setPositiveButton(
-                            "OK",
-                            null
-                    )
-                    .setCancelable(
-                            true
-                    )
-                    .show();
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void showErrorAndClose(
-            String message
-    ) {
-
-        try {
-
-            new AlertDialog.Builder(this)
-                    .setTitle(
-                            "Vishal Secure"
-                    )
-                    .setMessage(
-                            message
-                    )
-                    .setPositiveButton(
-                            "OK",
-                            (dialog, which) ->
-                                    finish()
-                    )
-                    .setCancelable(
-                            false
-                    )
-                    .show();
-
-        } catch (Exception ignored) {
-
-            finish();
-        }
-    }
-
-    @Override
-    protected void onPause() {
-
-        super.onPause();
-
-        if (videoView != null) {
-
-            try {
-
-                savedPosition =
-                        videoView.getCurrentPosition();
-
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-
-        destroyed = true;
-
-        handler.removeCallbacks(
-                progressRunnable
-        );
-
-        if (videoView != null) {
-
-            try {
-                videoView.stopPlayback();
-            } catch (Exception ignored) {
-            }
-        }
-
-        super.onDestroy();
-    }
-
-    private int dp(
-            int value
-    ) {
-
-        float density =
-                getResources()
-                        .getDisplayMetrics()
-                        .density;
-
-        return (int)
-                (value * density + 0.5f);
-    }
-}
+       
