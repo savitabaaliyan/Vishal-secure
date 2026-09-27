@@ -2,17 +2,20 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission
+        android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
         android:label="Vishal Secure"
         android:supportsRtl="true"
         android:theme="@style/Theme.VishalSecure">
+
         <activity
-    android:name=".VideoPlayerActivity"
-    android:screenOrientation="landscape"
-    android:exported="false" />
+            android:name=".VideoPlayerActivity"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"
@@ -20,8 +23,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+
+                <action
+                    android:name="android.intent.action.MAIN" />
+
+                <category
+                    android:name="android.intent.category.LAUNCHER" />
+
             </intent-filter>
 
         </activity>
