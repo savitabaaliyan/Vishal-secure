@@ -195,7 +195,7 @@ public class VideoPlayerActivity extends Activity
 
         playPauseButton = new Button(this);
         playPauseButton.setText("▶");
-        playPauseButton.setTextSize(22);
+        playPauseButton.setTextSize(24);
         playPauseButton.setTextColor(Color.WHITE);
         playPauseButton.setBackgroundColor(Color.TRANSPARENT);
         playPauseButton.setVisibility(View.GONE);
@@ -203,7 +203,7 @@ public class VideoPlayerActivity extends Activity
         FrameLayout.LayoutParams buttonParams =
                 new FrameLayout.LayoutParams(
                         90,
-                        55
+                        60
                 );
 
         buttonParams.gravity =
@@ -655,14 +655,6 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * IMPORTANT FIX:
-     *
-     * यहां SurfaceView की वर्तमान width/height नहीं ली जा रही।
-     * क्योंकि resizeVideo() खुद SurfaceView का आकार बदलता है।
-     *
-     * अब हमेशा फोन की वास्तविक screen size से गणना होगी।
-     */
     private void resizeVideo() {
 
         if (surfaceView == null ||
@@ -715,12 +707,6 @@ public class VideoPlayerActivity extends Activity
 
         if (landscape) {
 
-            /*
-             * Landscape:
-             * पूरा video दिखाई देगा।
-             * ऊपर/नीचे crop नहीं होगा।
-             */
-
             float widthRatio =
                     (float) screenWidth /
                             videoWidth;
@@ -748,11 +734,6 @@ public class VideoPlayerActivity extends Activity
                     );
 
         } else {
-
-            /*
-             * Portrait:
-             * पहले जैसा centered video.
-             */
 
             int maxWidth =
                     (int) (
@@ -939,6 +920,14 @@ public class VideoPlayerActivity extends Activity
                 View.VISIBLE
         );
 
+        timeText.bringToFront();
+        progressBar.bringToFront();
+        playPauseButton.bringToFront();
+
+        timeText.invalidate();
+        progressBar.invalidate();
+        playPauseButton.invalidate();
+
         showTime();
 
         handler.removeCallbacks(
@@ -947,7 +936,7 @@ public class VideoPlayerActivity extends Activity
 
         handler.postDelayed(
                 hideControlsRunnable,
-                2500
+                2000
         );
     }
 
@@ -1064,4 +1053,3 @@ public class VideoPlayerActivity extends Activity
         super.onDestroy();
     }
 }
-
