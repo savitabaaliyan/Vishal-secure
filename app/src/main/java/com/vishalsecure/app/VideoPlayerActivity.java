@@ -3,7 +3,6 @@ package com.vishalsecure.app;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
-import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -13,7 +12,6 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -88,7 +86,6 @@ public class VideoPlayerActivity extends Activity
 
         root.addView(surfaceView, videoParams);
 
-        // Touch layer
         View touchOverlay = new View(this);
         touchOverlay.setBackgroundColor(Color.TRANSPARENT);
 
@@ -100,7 +97,6 @@ public class VideoPlayerActivity extends Activity
 
         root.addView(touchOverlay, touchParams);
 
-        // Status
         statusText = new TextView(this);
         statusText.setTextColor(Color.WHITE);
         statusText.setTextSize(14);
@@ -112,12 +108,13 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        statusParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        statusParams.gravity =
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+
         statusParams.topMargin = 25;
 
         root.addView(statusText, statusParams);
 
-        // Time
         timeText = new TextView(this);
         timeText.setTextColor(Color.WHITE);
         timeText.setTextSize(13);
@@ -129,12 +126,13 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        timeParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        timeParams.gravity =
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+
         timeParams.bottomMargin = 75;
 
         root.addView(timeText, timeParams);
 
-        // Only Play/Pause button
         controlsLayout = new LinearLayout(this);
         controlsLayout.setGravity(Gravity.CENTER);
 
@@ -149,11 +147,17 @@ public class VideoPlayerActivity extends Activity
             }
 
             if (mediaPlayer.isPlaying()) {
+
                 mediaPlayer.pause();
+
                 playPauseButton.setText("▶");
+
             } else {
+
                 mediaPlayer.start();
+
                 playPauseButton.setText("❚❚");
+
                 startProgressUpdater();
             }
         });
@@ -166,146 +170,33 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        controlParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        controlParams.gravity =
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+
         controlParams.bottomMargin = 15;
 
         root.addView(controlsLayout, controlParams);
 
-        // Touch gestures
-        touchOverlay.setOnTouchListener((v, event) -> {
-
-            switch (event.getActionMasked()) {
-
-                case MotionEvent.ACTION_DOWN:
-
-                    downX = event.getX();
-                    downY = event.getY();
-
-                    gestureMoved = false;
-
-                    if (event.getPointerCount() == 2) {
-                        initialDistance = getDistance(event);
-                    }
-
-                    return true;
-
-                case MotionEvent.ACTION_POINTER_DOWN:
-
-                    if (event.getPointerCount() == 2) {
-                        initialDistance = getDistance(event);
-                    }
-
-                    return true;
-
-                case MotionEvent.ACTION_MOVE:
-
-                    if (event.getPointerCount() == 2) {
-
-                        float currentDistance = getDistance(event);
-
-                        if (initialDistance > 0) {
-
-                            float change =
-                                    currentDistance / initialDistance;
-
-                            if (change > 1.05f) {
-
-                                zoomFactor += 0.02f;
-                                if (zoomFactor > 2.0f) {
-                                    zoomFactor = 2.0f;
-                                }
-
-                                applyZoom();
-                                gestureMoved = true;
-
-                            } else if (change < 0.95f) {
-
-                                zoomFactor -= 0.02f;
-                                if (zoomFactor < 0.6f) {
-                                    zoomFactor = 0.6f;
-                                }
-
-                                applyZoom();
-                                gestureMoved = true;
-                            }
-
-                            initialDistance = currentDistance;
-                        }
-
-                        return true;
-                    }
-
-                    float moveX = event.getX();
-                    float moveY = event.getY();
-
-                    float dx = moveX - downX;
-                    float dy = moveY - downY;
-
-                    if (Math.abs(dx) > 30 &&
-                            Math.abs(dx) > Math.abs(dy)) {
-
-                        gestureMoved = true;
-
-                        if (dx > 0) {
-                            seekBy(10000);
-                        } else {
-                            seekBy(-10000);
-                        }
-
-                        downX = moveX;
-                    }
-
-                    return true;
-
-                case MotionEvent.ACTION_UP:
-
-                    if (!gestureMoved) {
-
-                        // Single tap = show/hide controls
-                        controlsVisible = !controlsVisible;
-
-                        controlsLayout.setVisibility(
-                                controlsVisible
-                                        ? View.VISIBLE
-                                        : View.GONE
-                        );
-
-                        statusText.setVisibility(
-                                controlsVisible
-                                        ? View.VISIBLE
-                                        : View.GONE
-                        );
-
-                        timeText.setVisibility(
-                                controlsVisible
-                                        ? View.VISIBLE
-                                        : View.GONE
-                        );
-                    }
-
-                    return true;
-            }
-
-            return true;
-        });
-
-        // Double tap = speed change
         touchOverlay.setOnTouchListener(
                 new View.OnTouchListener() {
 
                     long lastTap = 0;
 
                     @Override
-                    public boolean onTouch(View v, MotionEvent event) {
+                    public boolean onTouch(
+                            View v,
+                            MotionEvent event) {
 
                         if (event.getAction() ==
                                 MotionEvent.ACTION_UP) {
 
-                            long now = System.currentTimeMillis();
+                            long now =
+                                    System.currentTimeMillis();
 
                             if (now - lastTap < 350) {
 
                                 changeSpeed();
+
                                 lastTap = 0;
 
                                 return true;
@@ -324,7 +215,9 @@ public class VideoPlayerActivity extends Activity
         hideSystemBars();
     }
 
-    private boolean handleGesture(View v, MotionEvent event) {
+    private boolean handleGesture(
+            View v,
+            MotionEvent event) {
 
         switch (event.getActionMasked()) {
 
@@ -332,10 +225,12 @@ public class VideoPlayerActivity extends Activity
 
                 downX = event.getX();
                 downY = event.getY();
+
                 gestureMoved = false;
 
                 if (event.getPointerCount() == 2) {
-                    initialDistance = getDistance(event);
+                    initialDistance =
+                            getDistance(event);
                 }
 
                 return true;
@@ -343,7 +238,8 @@ public class VideoPlayerActivity extends Activity
             case MotionEvent.ACTION_POINTER_DOWN:
 
                 if (event.getPointerCount() == 2) {
-                    initialDistance = getDistance(event);
+                    initialDistance =
+                            getDistance(event);
                 }
 
                 return true;
@@ -358,7 +254,8 @@ public class VideoPlayerActivity extends Activity
                     if (initialDistance > 0) {
 
                         float ratio =
-                                currentDistance / initialDistance;
+                                currentDistance /
+                                initialDistance;
 
                         if (ratio > 1.05f) {
 
@@ -369,6 +266,7 @@ public class VideoPlayerActivity extends Activity
                             }
 
                             applyZoom();
+
                             gestureMoved = true;
 
                         } else if (ratio < 0.95f) {
@@ -380,10 +278,12 @@ public class VideoPlayerActivity extends Activity
                             }
 
                             applyZoom();
+
                             gestureMoved = true;
                         }
 
-                        initialDistance = currentDistance;
+                        initialDistance =
+                                currentDistance;
                     }
 
                     return true;
@@ -415,7 +315,8 @@ public class VideoPlayerActivity extends Activity
 
                 if (!gestureMoved) {
 
-                    controlsVisible = !controlsVisible;
+                    controlsVisible =
+                            !controlsVisible;
 
                     controlsLayout.setVisibility(
                             controlsVisible
@@ -448,10 +349,16 @@ public class VideoPlayerActivity extends Activity
             return 0;
         }
 
-        float x = event.getX(0) - event.getX(1);
-        float y = event.getY(0) - event.getY(1);
+        float x =
+                event.getX(0) -
+                event.getX(1);
 
-        return (float) Math.sqrt(x * x + y * y);
+        float y =
+                event.getY(0) -
+                event.getY(1);
+
+        return (float)
+                Math.sqrt(x * x + y * y);
     }
 
     private void seekBy(int milliseconds) {
@@ -462,10 +369,14 @@ public class VideoPlayerActivity extends Activity
 
         try {
 
-            int current = mediaPlayer.getCurrentPosition();
-            int duration = mediaPlayer.getDuration();
+            int current =
+                    mediaPlayer.getCurrentPosition();
 
-            int target = current + milliseconds;
+            int duration =
+                    mediaPlayer.getDuration();
+
+            int target =
+                    current + milliseconds;
 
             if (target < 0) {
                 target = 0;
@@ -499,13 +410,16 @@ public class VideoPlayerActivity extends Activity
                     android.os.Build.VERSION_CODES.M) {
 
                 mediaPlayer.setPlaybackParams(
-                        mediaPlayer.getPlaybackParams()
+                        mediaPlayer
+                                .getPlaybackParams()
                                 .setSpeed(playbackSpeed)
                 );
             }
 
             statusText.setText(
-                    "Speed: " + playbackSpeed + "x"
+                    "Speed: " +
+                    playbackSpeed +
+                    "x"
             );
 
         } catch (Exception ignored) {
@@ -513,7 +427,8 @@ public class VideoPlayerActivity extends Activity
     }
 
     @Override
-    public void surfaceCreated(SurfaceHolder holder) {
+    public void surfaceCreated(
+            SurfaceHolder holder) {
 
         surfaceReady = true;
 
@@ -538,7 +453,8 @@ public class VideoPlayerActivity extends Activity
     }
 
     @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
+    public void surfaceDestroyed(
+            SurfaceHolder holder) {
 
         surfaceReady = false;
 
@@ -547,7 +463,8 @@ public class VideoPlayerActivity extends Activity
 
     private void startVideo() {
 
-        if (!surfaceReady || videoUriString == null) {
+        if (!surfaceReady ||
+                videoUriString == null) {
             return;
         }
 
@@ -561,7 +478,9 @@ public class VideoPlayerActivity extends Activity
                     AudioManager.STREAM_MUSIC
             );
 
-            mediaPlayer.setDisplay(surfaceHolder);
+            mediaPlayer.setDisplay(
+                    surfaceHolder
+            );
 
             mediaPlayer.setOnVideoSizeChangedListener(
                     (mp, width, height) -> {
@@ -573,29 +492,40 @@ public class VideoPlayerActivity extends Activity
                     }
             );
 
-            mediaPlayer.setOnPreparedListener(mp -> {
+            mediaPlayer.setOnPreparedListener(
+                    mp -> {
 
-                videoWidth = mp.getVideoWidth();
-                videoHeight = mp.getVideoHeight();
+                        videoWidth =
+                                mp.getVideoWidth();
 
-                zoomFactor = 1.0f;
-                playbackSpeed = 1.0f;
+                        videoHeight =
+                                mp.getVideoHeight();
 
-                applyVideoFit();
+                        zoomFactor = 1.0f;
 
-                mp.start();
+                        playbackSpeed = 1.0f;
 
-                playPauseButton.setText("❚❚");
+                        applyVideoFit();
 
-                startProgressUpdater();
-            });
+                        mp.start();
 
-            mediaPlayer.setOnCompletionListener(mp -> {
+                        playPauseButton
+                                .setText("❚❚");
 
-                playPauseButton.setText("▶");
+                        startProgressUpdater();
+                    }
+            );
 
-                statusText.setText("Completed");
-            });
+            mediaPlayer.setOnCompletionListener(
+                    mp -> {
+
+                        playPauseButton
+                                .setText("▶");
+
+                        statusText
+                                .setText("Completed");
+                    }
+            );
 
             mediaPlayer.setOnErrorListener(
                     (mp, what, extra) -> {
@@ -608,14 +538,17 @@ public class VideoPlayerActivity extends Activity
                     }
             );
 
-            Uri uri = Uri.parse(videoUriString);
+            Uri uri =
+                    Uri.parse(videoUriString);
 
             mediaPlayer.setDataSource(
                     this,
                     uri
             );
 
-            statusText.setText("Loading...");
+            statusText.setText(
+                    "Loading..."
+            );
 
             mediaPlayer.prepareAsync();
 
@@ -627,6 +560,14 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
+    /*
+     * =====================================================
+     * VIDEO SIZE
+     *
+     * PORTRAIT  = CENTERED VIDEO
+     * LANDSCAPE = FULL SCREEN
+     * =====================================================
+     */
     private void applyVideoFit() {
 
         if (surfaceView == null ||
@@ -636,63 +577,70 @@ public class VideoPlayerActivity extends Activity
         }
 
         int screenWidth =
-                getWindowManager()
-                        .getDefaultDisplay()
-                        .getWidth();
+                surfaceView.getWidth();
 
         int screenHeight =
-                getWindowManager()
-                        .getDefaultDisplay()
-                        .getHeight();
+                surfaceView.getHeight();
+
+        if (screenWidth <= 0 ||
+                screenHeight <= 0) {
+            screenWidth =
+                    getResources()
+                            .getDisplayMetrics()
+                            .widthPixels;
+
+            screenHeight =
+                    getResources()
+                            .getDisplayMetrics()
+                            .heightPixels;
+        }
 
         float videoRatio =
                 (float) videoWidth /
-                        (float) videoHeight;
-
-        int targetWidth;
-        int targetHeight;
+                (float) videoHeight;
 
         boolean landscape =
                 screenWidth > screenHeight;
 
+        int targetWidth;
+        int targetHeight;
+
         if (landscape) {
 
-            // LANDSCAPE = CENTER SMALL
-            targetWidth =
-                    (int) (screenWidth * 0.70f);
-
+            // LANDSCAPE = FULL SCREEN
+            targetWidth = screenWidth;
             targetHeight =
                     (int) (targetWidth / videoRatio);
 
+            if (targetHeight < screenHeight) {
+
+                targetHeight = screenHeight;
+
+                targetWidth =
+                        (int) (targetHeight *
+                                videoRatio);
+            }
+
+        } else {
+
+            // PORTRAIT = CENTERED
+            targetWidth =
+                    (int) (screenWidth * 0.82f);
+
+            targetHeight =
+                    (int) (targetWidth /
+                            videoRatio);
+
             int maxHeight =
-                    (int) (screenHeight * 0.70f);
+                    (int) (screenHeight * 0.65f);
 
             if (targetHeight > maxHeight) {
 
                 targetHeight = maxHeight;
 
                 targetWidth =
-                        (int) (targetHeight * videoRatio);
-            }
-
-        } else {
-
-            // PORTRAIT = FULL SCREEN
-            if (videoRatio >
-                    (float) screenWidth /
-                    (float) screenHeight) {
-
-                targetWidth = screenWidth;
-
-                targetHeight =
-                        (int) (screenWidth / videoRatio);
-
-            } else {
-
-                targetHeight = screenHeight;
-
-                targetWidth =
-                        (int) (screenHeight * videoRatio);
+                        (int) (targetHeight *
+                                videoRatio);
             }
         }
 
@@ -716,18 +664,18 @@ public class VideoPlayerActivity extends Activity
         }
 
         int screenWidth =
-                getWindowManager()
-                        .getDefaultDisplay()
-                        .getWidth();
+                getResources()
+                        .getDisplayMetrics()
+                        .widthPixels;
 
         int screenHeight =
-                getWindowManager()
-                        .getDefaultDisplay()
-                        .getHeight();
+                getResources()
+                        .getDisplayMetrics()
+                        .heightPixels;
 
         float videoRatio =
                 (float) videoWidth /
-                        (float) videoHeight;
+                (float) videoHeight;
 
         boolean landscape =
                 screenWidth > screenHeight;
@@ -737,48 +685,50 @@ public class VideoPlayerActivity extends Activity
 
         if (landscape) {
 
-            baseWidth =
-                    (int) (screenWidth * 0.70f);
+            baseWidth = screenWidth;
 
             baseHeight =
-                    (int) (baseWidth / videoRatio);
+                    (int) (baseWidth /
+                            videoRatio);
+
+            if (baseHeight < screenHeight) {
+
+                baseHeight = screenHeight;
+
+                baseWidth =
+                        (int) (baseHeight *
+                                videoRatio);
+            }
+
+        } else {
+
+            baseWidth =
+                    (int) (screenWidth * 0.82f);
+
+            baseHeight =
+                    (int) (baseWidth /
+                            videoRatio);
 
             int maxHeight =
-                    (int) (screenHeight * 0.70f);
+                    (int) (screenHeight * 0.65f);
 
             if (baseHeight > maxHeight) {
 
                 baseHeight = maxHeight;
 
                 baseWidth =
-                        (int) (baseHeight * videoRatio);
-            }
-
-        } else {
-
-            if (videoRatio >
-                    (float) screenWidth /
-                    (float) screenHeight) {
-
-                baseWidth = screenWidth;
-
-                baseHeight =
-                        (int) (screenWidth / videoRatio);
-
-            } else {
-
-                baseHeight = screenHeight;
-
-                baseWidth =
-                        (int) (screenHeight * videoRatio);
+                        (int) (baseHeight *
+                                videoRatio);
             }
         }
 
         int targetWidth =
-                (int) (baseWidth * zoomFactor);
+                (int) (baseWidth *
+                        zoomFactor);
 
         int targetHeight =
-                (int) (baseHeight * zoomFactor);
+                (int) (baseHeight *
+                        zoomFactor);
 
         FrameLayout.LayoutParams params =
                 (FrameLayout.LayoutParams)
@@ -804,10 +754,12 @@ public class VideoPlayerActivity extends Activity
                             try {
 
                                 int current =
-                                        mediaPlayer.getCurrentPosition();
+                                        mediaPlayer
+                                                .getCurrentPosition();
 
                                 int duration =
-                                        mediaPlayer.getDuration();
+                                        mediaPlayer
+                                                .getDuration();
 
                                 timeText.setText(
                                         formatTime(current)
@@ -829,7 +781,8 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    private String formatTime(int milliseconds) {
+    private String formatTime(
+            int milliseconds) {
 
         int totalSeconds =
                 milliseconds / 1000;
@@ -849,14 +802,16 @@ public class VideoPlayerActivity extends Activity
 
     private void hideSystemBars() {
 
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-        );
+        getWindow()
+                .getDecorView()
+                .setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                );
     }
 
     @Override
@@ -914,3 +869,5 @@ public class VideoPlayerActivity extends Activity
         super.onDestroy();
     }
 }
+
+सर, एक महत्वपूर्ण बात: Portrait में मैंने वीडियो को लगभग 82% screen width और अधिकतम 65% screen height रखा है, इसलिए वह बीच में पूरा दिखाई देगा और कटेगा नहीं। Landscape में aspect ratio बनाए रखते हुए screen को पूरा भरने के लिए "CENTER_CROP" जैसा व्यवहार होगा; इसलिए अलग ratio की वीडियो में किनारे थोड़े crop हो सकते हैं।
