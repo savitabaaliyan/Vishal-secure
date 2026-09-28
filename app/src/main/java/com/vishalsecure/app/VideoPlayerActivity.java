@@ -114,6 +114,9 @@ public class VideoPlayerActivity extends Activity
         root.setBackgroundColor(Color.BLACK);
 
         surfaceView = new SurfaceView(this);
+
+        surfaceView.setZOrderMediaOverlay(true);
+
         surfaceView.setSecure(true);
         surfaceView.setKeepScreenOn(true);
 
@@ -1053,3 +1056,17 @@ public class VideoPlayerActivity extends Activity
         super.onDestroy();
     }
 }
+
+[/writing]
+
+सर, अब यही पूरा code GitHub में पुराने "VideoPlayerActivity.java" की जगह लगाइए।
+फिर Commit changes → Build Android APK करें।
+
+इस बार test में:
+
+- वीडियो अपने-आप चलेगी।
+- स्क्रीन पर शुरू में कोई control नहीं।
+- वीडियो को एक बार touch → ▶/⏸ + timeline + time दिखाई देंगे।
+- 2 सेकंड बाद गायब।
+- Right swipe = +10 sec, Left swipe = −10 sec और उस समय controls दिखेंगे।
+- Pinch zoom पहले जैसा ही रहेगा।
