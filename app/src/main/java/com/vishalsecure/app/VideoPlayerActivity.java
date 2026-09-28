@@ -949,6 +949,3 @@ public class VideoPlayerActivity extends Activity
     }
 }
 
-सर, इस बार मुख्य बदलाव सिर्फ यही है: Landscape में "Math.min()" है, इसलिए वीडियो पूरी दिखाई जाएगी और ऊपर-नीचे से नहीं कटेगी। बाकी Play/Pause, टाइमलाइन, टच, 10 सेकंड seek, zoom और speed वाला सिस्टम रखा गया है।
-
-अब इसी फाइल से Build Android APK कर दीजिए।
