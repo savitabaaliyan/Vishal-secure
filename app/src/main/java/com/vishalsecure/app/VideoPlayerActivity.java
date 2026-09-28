@@ -956,7 +956,8 @@ public class VideoPlayerActivity extends Activity
 
     //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // VIDEO FIT
-    // ORIGINAL ASPECT RATIO
+    // PORTRAIT = CENTERED
+    // LANDSCAPE = FULL SCREEN
     //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private void applyVideoFit() {
@@ -990,53 +991,103 @@ public class VideoPlayerActivity extends Activity
                     (float) videoWidth
                             / videoHeight;
 
-            float screenRatio =
-                    (float) screenWidth
-                            / screenHeight;
+            boolean landscape =
+                    screenWidth > screenHeight;
 
             FrameLayout.LayoutParams params =
                     (FrameLayout.LayoutParams)
                             surfaceView
                                     .getLayoutParams();
 
-            /*
-             * IMPORTANT:
-             *
-             * Portrait और Landscape दोनों में
-             * video का ORIGINAL aspect ratio रखा जाता है।
-             *
-             * इसलिए चेहरा/वीडियो stretch नहीं होगा।
-             */
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // LANDSCAPE
+            // FULL SCREEN
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            if (videoRatio > screenRatio) {
+            if (landscape) {
+
+                float screenRatio =
+                        (float) screenWidth
+                                / screenHeight;
+
+                if (videoRatio > screenRatio) {
+
+                    params.width =
+                            screenWidth;
+
+                    params.height =
+                            (int) (
+                                    screenWidth
+                                            / videoRatio
+                            );
+
+                } else {
+
+                    params.height =
+                            screenHeight;
+
+                    params.width =
+                            (int) (
+                                    screenHeight
+                                            * videoRatio
+                            );
+                }
+
+            }
+
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // PORTRAIT
+            // CENTERED / NOT FULL SCREEN
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            else {
 
                 /*
-                 * Video चौड़ी है।
-                 * Width पूरी screen।
+                 * Portrait में video को
+                 * screen की लगभग 85% width दी जाएगी।
+                 *
+                 * इससे video बीच में रहेगी और
+                 * पूरा portrait screen नहीं घेरेगी।
                  */
-                params.width =
-                        screenWidth;
 
-                params.height =
+                int targetWidth =
                         (int) (
-                                screenWidth
+                                screenWidth * 0.85f
+                        );
+
+                int targetHeight =
+                        (int) (
+                                targetWidth
                                         / videoRatio
                         );
 
-            } else {
-
                 /*
-                 * Video लंबी है।
-                 * Height पूरी screen।
+                 * बहुत लंबी video होने पर
+                 * उसे भी सीमित रखें।
                  */
-                params.height =
-                        screenHeight;
+
+                int maxHeight =
+                        (int) (
+                                screenHeight * 0.65f
+                        );
+
+                if (targetHeight > maxHeight) {
+
+                    targetHeight =
+                            maxHeight;
+
+                    targetWidth =
+                            (int) (
+                                    targetHeight
+                                            * videoRatio
+                            );
+                }
 
                 params.width =
-                        (int) (
-                                screenHeight
-                                        * videoRatio
-                        );
+                        targetWidth;
+
+                params.height =
+                        targetHeight;
             }
 
             params.gravity =
@@ -1075,39 +1126,76 @@ public class VideoPlayerActivity extends Activity
                             .getDisplayMetrics()
                             .heightPixels;
 
+            if (screenWidth <= 0 ||
+                    screenHeight <= 0) {
+
+                return;
+            }
+
             float videoRatio =
                     (float) videoWidth
                             / videoHeight;
 
-            float screenRatio =
-                    (float) screenWidth
-                            / screenHeight;
+            boolean landscape =
+                    screenWidth > screenHeight;
 
             float fitWidth;
             float fitHeight;
 
-            /*
-             * ORIGINAL ASPECT RATIO वाला
-             * base size निकालें।
-             */
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // LANDSCAPE BASE SIZE
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            if (videoRatio > screenRatio) {
+            if (landscape) {
+
+                float screenRatio =
+                        (float) screenWidth
+                                / screenHeight;
+
+                if (videoRatio > screenRatio) {
+
+                    fitWidth =
+                            screenWidth;
+
+                    fitHeight =
+                            screenWidth
+                                    / videoRatio;
+
+                } else {
+
+                    fitHeight =
+                            screenHeight;
+
+                    fitWidth =
+                            screenHeight
+                                    * videoRatio;
+                }
+
+            }
+
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // PORTRAIT BASE SIZE
+            //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            else {
 
                 fitWidth =
-                        screenWidth;
+                        screenWidth * 0.85f;
 
                 fitHeight =
-                        screenWidth
-                                / videoRatio;
+                        fitWidth / videoRatio;
 
-            } else {
+                float maxHeight =
+                        screenHeight * 0.65f;
 
-                fitHeight =
-                        screenHeight;
+                if (fitHeight > maxHeight) {
 
-                fitWidth =
-                        screenHeight
-                                * videoRatio;
+                    fitHeight =
+                            maxHeight;
+
+                    fitWidth =
+                            fitHeight * videoRatio;
+                }
             }
 
             int newWidth =
