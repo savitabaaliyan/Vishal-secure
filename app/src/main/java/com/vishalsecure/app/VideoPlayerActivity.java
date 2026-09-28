@@ -149,15 +149,12 @@ public class VideoPlayerActivity extends Activity
             if (mediaPlayer.isPlaying()) {
 
                 mediaPlayer.pause();
-
                 playPauseButton.setText("▶");
 
             } else {
 
                 mediaPlayer.start();
-
                 playPauseButton.setText("❚❚");
-
                 startProgressUpdater();
             }
         });
@@ -205,7 +202,7 @@ public class VideoPlayerActivity extends Activity
                             lastTap = now;
                         }
 
-                        return handleGesture(v, event);
+                        return handleGesture(event);
                     }
                 }
         );
@@ -215,9 +212,7 @@ public class VideoPlayerActivity extends Activity
         hideSystemBars();
     }
 
-    private boolean handleGesture(
-            View v,
-            MotionEvent event) {
+    private boolean handleGesture(MotionEvent event) {
 
         switch (event.getActionMasked()) {
 
@@ -266,7 +261,6 @@ public class VideoPlayerActivity extends Activity
                             }
 
                             applyZoom();
-
                             gestureMoved = true;
 
                         } else if (ratio < 0.95f) {
@@ -278,7 +272,6 @@ public class VideoPlayerActivity extends Activity
                             }
 
                             applyZoom();
-
                             gestureMoved = true;
                         }
 
@@ -502,7 +495,6 @@ public class VideoPlayerActivity extends Activity
                                 mp.getVideoHeight();
 
                         zoomFactor = 1.0f;
-
                         playbackSpeed = 1.0f;
 
                         applyVideoFit();
@@ -546,9 +538,7 @@ public class VideoPlayerActivity extends Activity
                     uri
             );
 
-            statusText.setText(
-                    "Loading..."
-            );
+            statusText.setText("Loading...");
 
             mediaPlayer.prepareAsync();
 
@@ -560,102 +550,7 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    /*
-     * =====================================================
-     * VIDEO SIZE
-     *
-     * PORTRAIT  = CENTERED VIDEO
-     * LANDSCAPE = FULL SCREEN
-     * =====================================================
-     */
     private void applyVideoFit() {
-
-        if (surfaceView == null ||
-                videoWidth <= 0 ||
-                videoHeight <= 0) {
-            return;
-        }
-
-        int screenWidth =
-                surfaceView.getWidth();
-
-        int screenHeight =
-                surfaceView.getHeight();
-
-        if (screenWidth <= 0 ||
-                screenHeight <= 0) {
-            screenWidth =
-                    getResources()
-                            .getDisplayMetrics()
-                            .widthPixels;
-
-            screenHeight =
-                    getResources()
-                            .getDisplayMetrics()
-                            .heightPixels;
-        }
-
-        float videoRatio =
-                (float) videoWidth /
-                (float) videoHeight;
-
-        boolean landscape =
-                screenWidth > screenHeight;
-
-        int targetWidth;
-        int targetHeight;
-
-        if (landscape) {
-
-            // LANDSCAPE = FULL SCREEN
-            targetWidth = screenWidth;
-            targetHeight =
-                    (int) (targetWidth / videoRatio);
-
-            if (targetHeight < screenHeight) {
-
-                targetHeight = screenHeight;
-
-                targetWidth =
-                        (int) (targetHeight *
-                                videoRatio);
-            }
-
-        } else {
-
-            // PORTRAIT = CENTERED
-            targetWidth =
-                    (int) (screenWidth * 0.82f);
-
-            targetHeight =
-                    (int) (targetWidth /
-                            videoRatio);
-
-            int maxHeight =
-                    (int) (screenHeight * 0.65f);
-
-            if (targetHeight > maxHeight) {
-
-                targetHeight = maxHeight;
-
-                targetWidth =
-                        (int) (targetHeight *
-                                videoRatio);
-            }
-        }
-
-        FrameLayout.LayoutParams params =
-                (FrameLayout.LayoutParams)
-                        surfaceView.getLayoutParams();
-
-        params.width = targetWidth;
-        params.height = targetHeight;
-        params.gravity = Gravity.CENTER;
-
-        surfaceView.setLayoutParams(params);
-    }
-
-    private void applyZoom() {
 
         if (surfaceView == null ||
                 videoWidth <= 0 ||
@@ -680,194 +575,41 @@ public class VideoPlayerActivity extends Activity
         boolean landscape =
                 screenWidth > screenHeight;
 
-        int baseWidth;
-        int baseHeight;
+        int targetWidth;
+        int targetHeight;
 
         if (landscape) {
 
-            baseWidth = screenWidth;
-
-            baseHeight =
-                    (int) (baseWidth /
+            targetWidth = screenWidth;
+            targetHeight =
+                    (int) (targetWidth /
                             videoRatio);
 
-            if (baseHeight < screenHeight) {
+            if (targetHeight < screenHeight) {
 
-                baseHeight = screenHeight;
+                targetHeight = screenHeight;
 
-                baseWidth =
-                        (int) (baseHeight *
+                targetWidth =
+                        (int) (targetHeight *
                                 videoRatio);
             }
 
         } else {
 
-            baseWidth =
+            targetWidth =
                     (int) (screenWidth * 0.82f);
 
-            baseHeight =
-                    (int) (baseWidth /
+            targetHeight =
+                    (int) (targetWidth /
                             videoRatio);
 
             int maxHeight =
                     (int) (screenHeight * 0.65f);
 
-            if (baseHeight > maxHeight) {
+            if (targetHeight > maxHeight) {
 
-                baseHeight = maxHeight;
+                targetHeight = maxHeight;
 
-                baseWidth =
-                        (int) (baseHeight *
-                                videoRatio);
-            }
-        }
-
-        int targetWidth =
-                (int) (baseWidth *
-                        zoomFactor);
-
-        int targetHeight =
-                (int) (baseHeight *
-                        zoomFactor);
-
-        FrameLayout.LayoutParams params =
-                (FrameLayout.LayoutParams)
-                        surfaceView.getLayoutParams();
-
-        params.width = targetWidth;
-        params.height = targetHeight;
-        params.gravity = Gravity.CENTER;
-
-        surfaceView.setLayoutParams(params);
-    }
-
-    private void startProgressUpdater() {
-
-        handler.postDelayed(
-                new Runnable() {
-
-                    @Override
-                    public void run() {
-
-                        if (mediaPlayer != null) {
-
-                            try {
-
-                                int current =
-                                        mediaPlayer
-                                                .getCurrentPosition();
-
-                                int duration =
-                                        mediaPlayer
-                                                .getDuration();
-
-                                timeText.setText(
-                                        formatTime(current)
-                                                + " / "
-                                                + formatTime(duration)
-                                );
-
-                            } catch (Exception ignored) {
-                            }
-                        }
-
-                        handler.postDelayed(
-                                this,
-                                500
-                        );
-                    }
-                },
-                500
-        );
-    }
-
-    private String formatTime(
-            int milliseconds) {
-
-        int totalSeconds =
-                milliseconds / 1000;
-
-        int minutes =
-                totalSeconds / 60;
-
-        int seconds =
-                totalSeconds % 60;
-
-        return String.format(
-                "%02d:%02d",
-                minutes,
-                seconds
-        );
-    }
-
-    private void hideSystemBars() {
-
-        getWindow()
-                .getDecorView()
-                .setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_FULLSCREEN
-                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                );
-    }
-
-    @Override
-    protected void onPause() {
-
-        super.onPause();
-
-        if (mediaPlayer != null &&
-                mediaPlayer.isPlaying()) {
-
-            mediaPlayer.pause();
-
-            playPauseButton.setText("▶");
-        }
-    }
-
-    @Override
-    protected void onResume() {
-
-        super.onResume();
-
-        hideSystemBars();
-    }
-
-    private void releasePlayer() {
-
-        if (mediaPlayer != null) {
-
-            try {
-                mediaPlayer.stop();
-            } catch (Exception ignored) {
-            }
-
-            try {
-                mediaPlayer.reset();
-            } catch (Exception ignored) {
-            }
-
-            try {
-                mediaPlayer.release();
-            } catch (Exception ignored) {
-            }
-
-            mediaPlayer = null;
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-
-        handler.removeCallbacksAndMessages(null);
-
-        releasePlayer();
-
-        super.onDestroy();
-    }
-}
-
-सर, एक महत्वपूर्ण बात: Portrait में मैंने वीडियो को लगभग 82% screen width और अधिकतम 65% screen height रखा है, इसलिए वह बीच में पूरा दिखाई देगा और कटेगा नहीं। Landscape में aspect ratio बनाए रखते हुए screen को पूरा भरने के लिए "CENTER_CROP" जैसा व्यवहार होगा; इसलिए अलग ratio की वीडियो में किनारे थोड़े crop हो सकते हैं।
+                targetWidth =
+                        (int) (targetHeight *
+                                videoRatio
