@@ -1,13 +1,14 @@
 package com.vishalsecure.app;
 
 import android.app.Activity;
-import android.os.Bundle;
-import android.os.Handler;
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -28,6 +29,7 @@ public class VideoPlayerActivity extends Activity
     private MediaPlayer mediaPlayer;
 
     private FrameLayout rootLayout;
+
     private TextView currentTimeText;
     private TextView totalTimeText;
     private TextView statusText;
@@ -48,52 +50,98 @@ public class VideoPlayerActivity extends Activity
     private float zoomFactor = 1.0f;
     private float initialDistance = 0.0f;
 
-    // Double-tap detection
-    private long lastTapTime = 0;
-    private float lastTapX = 0;
-    private float lastTapY = 0;
+    private long lastTapTime = 0L;
+    private float lastTapX = 0.0f;
+    private float lastTapY = 0.0f;
 
     private static final long DOUBLE_TAP_TIME = 350;
-    private static final long SEEK_MS = 10000;
+    private static final int SEEK_MS = 10000;
 
-    private final Handler handler = new Handler();
+    private final Handler handler =
+            new Handler();
 
-    private final Runnable updateProgressRunnable = new Runnable() {
-        @Override
-        public void run() {
+    private long expiryTime = 0L;
 
-            if (mediaPlayer != null && playerPrepared) {
+    private boolean expiryHandled = false;
 
-                try {
-                    int current = mediaPlayer.getCurrentPosition();
-                    int duration = mediaPlayer.getDuration();
+    private final Runnable updateProgressRunnable =
+            new Runnable() {
+                @Override
+                public void run() {
 
-                    if (!userSeeking) {
-                        progressBar.setMax(duration);
-                        progressBar.setProgress(current);
-                        showTime(current, duration);
+                    if (mediaPlayer != null &&
+                            playerPrepared &&
+                            !userSeeking) {
+
+                        try {
+
+                            int position =
+                                    mediaPlayer.getCurrentPosition();
+
+                            int duration =
+                                    mediaPlayer.getDuration();
+
+                            if (duration > 0) {
+
+                                progressBar.setMax(
+                                        duration
+                                );
+
+                                progressBar.setProgress(
+                                        position
+                                );
+
+                                showTime(
+                                        position,
+                                        duration
+                                );
+                            }
+
+                        } catch (Exception ignored) {
+                        }
                     }
 
-                } catch (Exception ignored) {
+                    handler.postDelayed(
+                            this,
+                            500
+                    );
                 }
-            }
+            };
 
-            handler.postDelayed(this, 500);
-        }
-    };
+    /*
+     * PHASE-2A
+     * हर 1 सेकंड में expiry check होगी।
+     */
+    private final Runnable expiryCheckRunnable =
+            new Runnable() {
+                @Override
+                public void run() {
 
-    private final Runnable hideControlsRunnable = new Runnable() {
-        @Override
-        public void run() {
-            hideControls();
-        }
-    };
+                    if (expiryHandled) {
+                        return;
+                    }
+
+                    if (isExpired()) {
+
+                        expirePlayback();
+
+                        return;
+                    }
+
+                    handler.postDelayed(
+                            this,
+                            1000
+                    );
+                }
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        requestWindowFeature(
+                Window.FEATURE_NO_TITLE
+        );
 
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -105,252 +153,183 @@ public class VideoPlayerActivity extends Activity
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
-        getWindow().setNavigationBarColor(Color.BLACK);
-        getWindow().setStatusBarColor(Color.BLACK);
+        getWindow().setNavigationBarColor(
+                Color.BLACK
+        );
 
-        videoUriString = getIntent().getStringExtra("video_uri");
+        getWindow().setStatusBarColor(
+                Color.BLACK
+        );
 
-        if (videoUriString == null) {
-            finish();
-            return;
-        }
+        videoUriString =
+                getIntent().getStringExtra(
+                        "video_uri"
+                );
+
+        /*
+         * PHASE-2A
+         * MainActivity से expiry time लेना।
+         */
+        expiryTime =
+                getIntent().getLongExtra(
+                        "expiry_time",
+                        0L
+                );
 
         buildUI();
 
-        handler.post(updateProgressRunnable);
+        handler.post(
+                updateProgressRunnable
+        );
+
+        handler.post(
+                expiryCheckRunnable
+        );
+
+        if (isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
+    }
+
+    private boolean isExpired() {
+
+        if (expiryTime <= 0L) {
+            return false;
+        }
+
+        return System.currentTimeMillis()
+                >= expiryTime;
     }
 
     private void buildUI() {
 
-        rootLayout = new FrameLayout(this);
-        rootLayout.setBackgroundColor(Color.BLACK);
+        rootLayout =
+                new FrameLayout(this);
 
-        setContentView(rootLayout);
+        rootLayout.setBackgroundColor(
+                Color.BLACK
+        );
 
-        // ============================================================
-        // VIDEO SURFACE
-        // ============================================================
-
-        surfaceView = new SurfaceView(this);
+        surfaceView =
+                new SurfaceView(this);
 
         surfaceView.setSecure(true);
+
         surfaceView.setKeepScreenOn(true);
 
-        surfaceHolder = surfaceView.getHolder();
+        surfaceHolder =
+                surfaceView.getHolder();
+
         surfaceHolder.addCallback(this);
 
-        FrameLayout.LayoutParams videoParams =
+        rootLayout.addView(
+                surfaceView,
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT
-                );
+                )
+        );
 
-        videoParams.gravity = Gravity.CENTER;
+        /*
+         * Transparent touch layer.
+         */
+        View touchLayer =
+                new View(this);
 
-        rootLayout.addView(surfaceView, videoParams);
+        touchLayer.setBackgroundColor(
+                Color.TRANSPARENT
+        );
 
-        // ============================================================
-        // TOUCH LAYER
-        // ============================================================
+        touchLayer.setOnTouchListener(
+                new View.OnTouchListener() {
 
-        TextView touchView = new TextView(this);
+                    @Override
+                    public boolean onTouch(
+                            View v,
+                            MotionEvent event
+                    ) {
 
-        touchView.setBackgroundColor(Color.TRANSPARENT);
-
-        FrameLayout.LayoutParams touchParams =
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                );
-
-        rootLayout.addView(touchView, touchParams);
-
-        touchView.setOnTouchListener(new View.OnTouchListener() {
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-
-                switch (event.getActionMasked()) {
-
-                    case MotionEvent.ACTION_DOWN:
-
-                        float tapX = event.getX();
-                        float tapY = event.getY();
-
-                        long now = System.currentTimeMillis();
-
-                        // ------------------------------------------------
-                        // DOUBLE TAP
-                        // ------------------------------------------------
-
-                        if (now - lastTapTime <= DOUBLE_TAP_TIME) {
-
-                            float screenWidth = v.getWidth();
-
-                            // Double tap LEFT = 10 sec back
-                            if (tapX < screenWidth / 2.0f) {
-
-                                seekRelative(-SEEK_MS);
-
-                            }
-                            // Double tap RIGHT = 10 sec forward
-                            else {
-
-                                seekRelative(SEEK_MS);
-                            }
-
-                            lastTapTime = 0;
-
-                            return true;
-                        }
-
-                        // First tap
-                        lastTapTime = now;
-                        lastTapX = tapX;
-                        lastTapY = tapY;
-
-                        showControls();
+                        handleTouch(event);
 
                         return true;
-
-                    case MotionEvent.ACTION_POINTER_DOWN:
-
-                        if (event.getPointerCount() >= 2) {
-
-                            initialDistance =
-                                    distanceBetweenFingers(event);
-                        }
-
-                        return true;
-
-                    case MotionEvent.ACTION_MOVE:
-
-                        if (event.getPointerCount() >= 2 &&
-                                initialDistance > 0) {
-
-                            float currentDistance =
-                                    distanceBetweenFingers(event);
-
-                            float scale =
-                                    currentDistance / initialDistance;
-
-                            zoomFactor =
-                                    zoomFactor * scale;
-
-                            if (zoomFactor < 1.0f) {
-                                zoomFactor = 1.0f;
-                            }
-
-                            if (zoomFactor > 3.0f) {
-                                zoomFactor = 3.0f;
-                            }
-
-                            initialDistance =
-                                    currentDistance;
-
-                            applyZoom();
-                        }
-
-                        return true;
-
-                    case MotionEvent.ACTION_POINTER_UP:
-
-                        initialDistance = 0;
-
-                        return true;
-
-                    case MotionEvent.ACTION_UP:
-
-                        initialDistance = 0;
-
-                        return true;
+                    }
                 }
+        );
 
-                return true;
-            }
-        });
+        rootLayout.addView(
+                touchLayer,
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                )
+        );
 
-        // ============================================================
-        // CURRENT TIME
-        // ============================================================
-
-        currentTimeText = new TextView(this);
-
-        currentTimeText.setText("00:00");
-        currentTimeText.setTextColor(Color.WHITE);
-        currentTimeText.setTextSize(14);
-        currentTimeText.setGravity(Gravity.CENTER_VERTICAL);
+        /*
+         * Current time.
+         */
+        currentTimeText =
+                createTimeText();
 
         FrameLayout.LayoutParams currentParams =
                 new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
+                        150,
+                        60
                 );
 
         currentParams.gravity =
-                Gravity.START | Gravity.BOTTOM;
+                Gravity.BOTTOM |
+                        Gravity.LEFT;
 
-        currentParams.leftMargin = 12;
-        currentParams.bottomMargin = 72;
+        currentParams.setMargins(
+                20,
+                0,
+                0,
+                25
+        );
 
         rootLayout.addView(
                 currentTimeText,
                 currentParams
         );
 
-        // ============================================================
-        // TOTAL TIME
-        // ============================================================
-
-        totalTimeText = new TextView(this);
-
-        totalTimeText.setText("00:00");
-        totalTimeText.setTextColor(Color.WHITE);
-        totalTimeText.setTextSize(14);
-        totalTimeText.setGravity(Gravity.CENTER_VERTICAL);
+        /*
+         * Total time.
+         */
+        totalTimeText =
+                createTimeText();
 
         FrameLayout.LayoutParams totalParams =
                 new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
+                        150,
+                        60
                 );
 
         totalParams.gravity =
-                Gravity.END | Gravity.BOTTOM;
+                Gravity.BOTTOM |
+                        Gravity.RIGHT;
 
-        totalParams.rightMargin = 12;
-        totalParams.bottomMargin = 72;
+        totalParams.setMargins(
+                0,
+                0,
+                20,
+                25
+        );
 
         rootLayout.addView(
                 totalTimeText,
                 totalParams
         );
 
-        // ============================================================
-        // TIMELINE
-        // ============================================================
-
-        progressBar = new SeekBar(this);
+        /*
+         * Timeline.
+         */
+        progressBar =
+                new SeekBar(this);
 
         progressBar.setMax(1000);
-        progressBar.setProgress(0);
-
-        FrameLayout.LayoutParams progressParams =
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
-                );
-
-        progressParams.gravity = Gravity.BOTTOM;
-
-        progressParams.leftMargin = 8;
-        progressParams.rightMargin = 8;
-        progressParams.bottomMargin = 38;
-
-        rootLayout.addView(
-                progressBar,
-                progressParams
-        );
 
         progressBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -359,31 +338,51 @@ public class VideoPlayerActivity extends Activity
                     public void onProgressChanged(
                             SeekBar seekBar,
                             int progress,
-                            boolean fromUser) {
+                            boolean fromUser
+                    ) {
 
                         if (fromUser &&
                                 mediaPlayer != null &&
                                 playerPrepared) {
 
-                            showTime(
-                                    progress,
-                                    mediaPlayer.getDuration()
-                            );
+                            try {
+
+                                showTime(
+                                        progress,
+                                        mediaPlayer.getDuration()
+                                );
+
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
 
                     @Override
                     public void onStartTrackingTouch(
-                            SeekBar seekBar) {
+                            SeekBar seekBar
+                    ) {
+
+                        if (isExpired()) {
+
+                            expirePlayback();
+
+                            return;
+                        }
 
                         userSeeking = true;
-
-                        showControls();
                     }
 
                     @Override
                     public void onStopTrackingTouch(
-                            SeekBar seekBar) {
+                            SeekBar seekBar
+                    ) {
+
+                        if (isExpired()) {
+
+                            expirePlayback();
+
+                            return;
+                        }
 
                         if (mediaPlayer != null &&
                                 playerPrepared) {
@@ -399,21 +398,44 @@ public class VideoPlayerActivity extends Activity
                         }
 
                         userSeeking = false;
-
-                        showControls();
                     }
                 }
         );
 
-        // ============================================================
-        // PLAY / PAUSE BUTTON
-        // ============================================================
+        FrameLayout.LayoutParams progressParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        70
+                );
 
-        playPauseButton = new Button(this);
+        progressParams.gravity =
+                Gravity.BOTTOM;
+
+        progressParams.setMargins(
+                140,
+                0,
+                140,
+                10
+        );
+
+        rootLayout.addView(
+                progressBar,
+                progressParams
+        );
+
+        /*
+         * Play/Pause button.
+         */
+        playPauseButton =
+                new Button(this);
 
         playPauseButton.setText("▶");
-        playPauseButton.setTextColor(Color.WHITE);
-        playPauseButton.setTextSize(25);
+
+        playPauseButton.setTextSize(22);
+
+        playPauseButton.setTextColor(
+                Color.WHITE
+        );
 
         GradientDrawable buttonBackground =
                 new GradientDrawable();
@@ -423,107 +445,362 @@ public class VideoPlayerActivity extends Activity
         );
 
         buttonBackground.setColor(
-                Color.argb(210, 70, 70, 70)
-        );
-
-        buttonBackground.setStroke(
-                2,
-                Color.WHITE
+                Color.argb(
+                        180,
+                        0,
+                        0,
+                        0
+                )
         );
 
         playPauseButton.setBackground(
                 buttonBackground
         );
 
-        playPauseButton.setVisibility(
-                View.GONE
+        playPauseButton.setOnClickListener(
+                v -> {
+
+                    if (isExpired()) {
+
+                        expirePlayback();
+
+                        return;
+                    }
+
+                    togglePlayPause();
+                }
         );
 
         FrameLayout.LayoutParams playParams =
                 new FrameLayout.LayoutParams(
-                        75,
-                        75
+                        90,
+                        90
                 );
 
         playParams.gravity =
-                Gravity.CENTER_HORIZONTAL |
-                Gravity.BOTTOM;
+                Gravity.BOTTOM |
+                        Gravity.CENTER_HORIZONTAL;
 
-        playParams.bottomMargin = 85;
+        playParams.setMargins(
+                0,
+                0,
+                0,
+                75
+        );
 
         rootLayout.addView(
                 playPauseButton,
                 playParams
         );
 
-        playPauseButton.setOnClickListener(
-                new View.OnClickListener() {
+        /*
+         * Status.
+         */
+        statusText =
+                new TextView(this);
 
-                    @Override
-                    public void onClick(View v) {
-
-                        if (mediaPlayer == null ||
-                                !playerPrepared) {
-
-                            return;
-                        }
-
-                        try {
-
-                            if (mediaPlayer.isPlaying()) {
-
-                                mediaPlayer.pause();
-
-                                playPauseButton.setText("▶");
-
-                            } else {
-
-                                mediaPlayer.start();
-
-                                playPauseButton.setText("❚❚");
-                            }
-
-                            showControls();
-
-                        } catch (Exception ignored) {
-                        }
-                    }
-                }
+        statusText.setTextColor(
+                Color.WHITE
         );
 
-        // ============================================================
-        // STATUS TEXT
-        // ============================================================
+        statusText.setTextSize(16);
 
-        statusText = new TextView(this);
-
-        statusText.setTextColor(Color.WHITE);
-        statusText.setTextSize(15);
-        statusText.setGravity(Gravity.CENTER);
-
-        statusText.setVisibility(
-                View.GONE
+        statusText.setGravity(
+                Gravity.CENTER
         );
 
         FrameLayout.LayoutParams statusParams =
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
+                        100
                 );
 
-        statusParams.gravity = Gravity.CENTER;
+        statusParams.gravity =
+                Gravity.CENTER;
 
         rootLayout.addView(
                 statusText,
                 statusParams
         );
+
+        /*
+         * Controls शुरुआत में hidden.
+         */
+        hideControls();
+
+        setContentView(rootLayout);
     }
 
-    // ================================================================
-    // 10 SECOND SEEK
-    // ================================================================
+    private TextView createTimeText() {
 
-    private void seekRelative(long amount) {
+        TextView text =
+                new TextView(this);
+
+        text.setTextColor(
+                Color.WHITE
+        );
+
+        text.setTextSize(14);
+
+        text.setGravity(
+                Gravity.CENTER
+        );
+
+        text.setText("00:00");
+
+        return text;
+    }
+
+    private void handleTouch(
+            MotionEvent event
+    ) {
+
+        if (isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
+
+        switch (event.getActionMasked()) {
+
+            case MotionEvent.ACTION_DOWN:
+
+                lastTapX =
+                        event.getX();
+
+                lastTapY =
+                        event.getY();
+
+                long now =
+                        System.currentTimeMillis();
+
+                if (now - lastTapTime
+                        <= DOUBLE_TAP_TIME) {
+
+                    if (lastTapX <
+                            rootLayout.getWidth() / 2f) {
+
+                        seekRelative(
+                                -SEEK_MS
+                        );
+
+                    } else {
+
+                        seekRelative(
+                                SEEK_MS
+                        );
+                    }
+
+                    lastTapTime = 0L;
+
+                } else {
+
+                    lastTapTime = now;
+
+                    showControls();
+                }
+
+                break;
+
+            case MotionEvent.ACTION_POINTER_DOWN:
+
+                if (event.getPointerCount() >= 2) {
+
+                    initialDistance =
+                            distanceBetweenFingers(
+                                    event
+                            );
+                }
+
+                break;
+
+            case MotionEvent.ACTION_MOVE:
+
+                if (event.getPointerCount() >= 2 &&
+                        initialDistance > 0) {
+
+                    float currentDistance =
+                            distanceBetweenFingers(
+                                    event
+                            );
+
+                    float scale =
+                            currentDistance /
+                                    initialDistance;
+
+                    zoomFactor =
+                            Math.max(
+                                    1.0f,
+                                    Math.min(
+                                            3.0f,
+                                            zoomFactor * scale
+                                    )
+                            );
+
+                    initialDistance =
+                            currentDistance;
+
+                    applyZoom();
+                }
+
+                break;
+
+            case MotionEvent.ACTION_POINTER_UP:
+
+                initialDistance = 0;
+
+                break;
+        }
+    }
+
+    private float distanceBetweenFingers(
+            MotionEvent event
+    ) {
+
+        if (event.getPointerCount() < 2) {
+            return 0;
+        }
+
+        float dx =
+                event.getX(0) -
+                        event.getX(1);
+
+        float dy =
+                event.getY(0) -
+                        event.getY(1);
+
+        return (float) Math.sqrt(
+                dx * dx + dy * dy
+        );
+    }
+
+    private void showControls() {
+
+        if (expiryHandled) {
+            return;
+        }
+
+        controlsVisible = true;
+
+        playPauseButton.setVisibility(
+                View.VISIBLE
+        );
+
+        currentTimeText.setVisibility(
+                View.VISIBLE
+        );
+
+        totalTimeText.setVisibility(
+                View.VISIBLE
+        );
+
+        progressBar.setVisibility(
+                View.VISIBLE
+        );
+
+        playPauseButton.bringToFront();
+        currentTimeText.bringToFront();
+        totalTimeText.bringToFront();
+        progressBar.bringToFront();
+
+        handler.removeCallbacks(
+                hideControlsRunnable
+        );
+
+        handler.postDelayed(
+                hideControlsRunnable,
+                2000
+        );
+    }
+
+    private final Runnable hideControlsRunnable =
+            new Runnable() {
+                @Override
+                public void run() {
+                    hideControls();
+                }
+            };
+
+    private void hideControls() {
+
+        controlsVisible = false;
+
+        if (playPauseButton != null) {
+
+            playPauseButton.setVisibility(
+                    View.GONE
+            );
+        }
+
+        if (currentTimeText != null) {
+
+            currentTimeText.setVisibility(
+                    View.GONE
+            );
+        }
+
+        if (totalTimeText != null) {
+
+            totalTimeText.setVisibility(
+                    View.GONE
+            );
+        }
+
+        if (progressBar != null) {
+
+            progressBar.setVisibility(
+                    View.GONE
+            );
+        }
+    }
+
+    private void togglePlayPause() {
+
+        if (mediaPlayer == null ||
+                !playerPrepared) {
+
+            return;
+        }
+
+        if (isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
+
+        try {
+
+            if (mediaPlayer.isPlaying()) {
+
+                mediaPlayer.pause();
+
+                playPauseButton.setText("▶");
+
+            } else {
+
+                mediaPlayer.start();
+
+                playPauseButton.setText("Ⅱ");
+            }
+
+            showControls();
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void seekRelative(
+            int milliseconds
+    ) {
+
+        if (isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
 
         if (mediaPlayer == null ||
                 !playerPrepared) {
@@ -539,43 +816,44 @@ public class VideoPlayerActivity extends Activity
             int duration =
                     mediaPlayer.getDuration();
 
-            long newPosition =
-                    current + amount;
+            int target =
+                    current + milliseconds;
 
-            if (newPosition < 0) {
-                newPosition = 0;
-            }
+            target =
+                    Math.max(
+                            0,
+                            Math.min(
+                                    target,
+                                    duration
+                            )
+                    );
 
-            if (newPosition > duration) {
-                newPosition = duration;
-            }
-
-            mediaPlayer.seekTo(
-                    (int) newPosition
-            );
-
-            progressBar.setProgress(
-                    (int) newPosition
-            );
+            mediaPlayer.seekTo(target);
 
             showTime(
-                    (int) newPosition,
+                    target,
                     duration
             );
+
+            showControls();
 
         } catch (Exception ignored) {
         }
     }
 
-    // ================================================================
-    // SURFACE CALLBACKS
-    // ================================================================
-
     @Override
     public void surfaceCreated(
-            SurfaceHolder holder) {
+            SurfaceHolder holder
+    ) {
 
         surfaceReady = true;
+
+        if (isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
 
         preparePlayer();
     }
@@ -585,26 +863,35 @@ public class VideoPlayerActivity extends Activity
             SurfaceHolder holder,
             int format,
             int width,
-            int height) {
+            int height
+    ) {
     }
 
     @Override
     public void surfaceDestroyed(
-            SurfaceHolder holder) {
+            SurfaceHolder holder
+    ) {
 
         surfaceReady = false;
-        playerPrepared = false;
-
-        releasePlayer();
     }
-
-    // ================================================================
-    // PREPARE PLAYER
-    // ================================================================
 
     private void preparePlayer() {
 
-        if (!surfaceReady) {
+        if (expiryHandled ||
+                isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
+
+        if (videoUriString == null ||
+                videoUriString.trim().isEmpty()) {
+
+            statusText.setText(
+                    "Video not found"
+            );
+
             return;
         }
 
@@ -615,14 +902,14 @@ public class VideoPlayerActivity extends Activity
             mediaPlayer =
                     new MediaPlayer();
 
-            playerPrepared = false;
-
             mediaPlayer.setAudioStreamType(
                     AudioManager.STREAM_MUSIC
             );
 
             Uri videoUri =
-                    Uri.parse(videoUriString);
+                    Uri.parse(
+                            videoUriString
+                    );
 
             mediaPlayer.setDataSource(
                     this,
@@ -634,106 +921,78 @@ public class VideoPlayerActivity extends Activity
             );
 
             mediaPlayer.setOnPreparedListener(
-                    new MediaPlayer.OnPreparedListener() {
+                    mp -> {
 
-                        @Override
-                        public void onPrepared(
-                                MediaPlayer mp) {
+                        if (isExpired()) {
 
-                            playerPrepared = true;
+                            expirePlayback();
 
-                            try {
-
-                                videoWidth =
-                                        mp.getVideoWidth();
-
-                                videoHeight =
-                                        mp.getVideoHeight();
-
-                                int duration =
-                                        mp.getDuration();
-
-                                progressBar.setMax(
-                                        duration
-                                );
-
-                                progressBar.setProgress(
-                                        0
-                                );
-
-                                showTime(
-                                        0,
-                                        duration
-                                );
-
-                                applyZoom();
-
-                                mp.start();
-
-                                playPauseButton.setText(
-                                        "❚❚"
-                                );
-
-                                // Controls initially visible
-                                showControls();
-
-                            } catch (Exception ignored) {
-                            }
+                            return;
                         }
+
+                        playerPrepared = true;
+
+                        videoWidth =
+                                mp.getVideoWidth();
+
+                        videoHeight =
+                                mp.getVideoHeight();
+
+                        int duration =
+                                mp.getDuration();
+
+                        progressBar.setMax(
+                                duration
+                        );
+
+                        totalTimeText.setText(
+                                formatTime(duration)
+                        );
+
+                        applyZoom();
+
+                        /*
+                         * Expiry check ठीक
+                         * start से पहले भी।
+                         */
+                        if (isExpired()) {
+
+                            expirePlayback();
+
+                            return;
+                        }
+
+                        mp.start();
+
+                        playPauseButton.setText(
+                                "Ⅱ"
+                        );
+
+                        showControls();
                     }
             );
 
             mediaPlayer.setOnCompletionListener(
-                    new MediaPlayer.OnCompletionListener() {
+                    mp -> {
 
-                        @Override
-                        public void onCompletion(
-                                MediaPlayer mp) {
+                        playPauseButton.setText(
+                                "▶"
+                        );
 
-                            try {
-
-                                playPauseButton.setText(
-                                        "▶"
-                                );
-
-                                progressBar.setProgress(
-                                        progressBar.getMax()
-                                );
-
-                                showTime(
-                                        progressBar.getMax(),
-                                        progressBar.getMax()
-                                );
-
-                                showControls();
-
-                            } catch (Exception ignored) {
-                            }
+                        if (!expiryHandled) {
+                            showControls();
                         }
                     }
             );
 
             mediaPlayer.setOnErrorListener(
-                    new MediaPlayer.OnErrorListener() {
+                    (mp, what, extra) -> {
 
-                        @Override
-                        public boolean onError(
-                                MediaPlayer mp,
-                                int what,
-                                int extra) {
+                        statusText.setText(
+                                "Video playback error"
+                        );
 
-                            playerPrepared = false;
-
-                            statusText.setText(
-                                    "Video playback error"
-                            );
-
-                            statusText.setVisibility(
-                                    View.VISIBLE
-                            );
-
-                            return true;
-                        }
+                        return true;
                     }
             );
 
@@ -741,152 +1000,10 @@ public class VideoPlayerActivity extends Activity
 
         } catch (Exception e) {
 
-            playerPrepared = false;
-
             statusText.setText(
-                    "Unable to play video"
-            );
-
-            statusText.setVisibility(
-                    View.VISIBLE
+                    "Video playback error"
             );
         }
-    }
-
-    // ================================================================
-    // CONTROLS
-    // ================================================================
-
-    private void showControls() {
-
-        controlsVisible = true;
-
-        playPauseButton.bringToFront();
-        currentTimeText.bringToFront();
-        totalTimeText.bringToFront();
-        progressBar.bringToFront();
-
-        playPauseButton.setVisibility(
-                View.VISIBLE
-        );
-
-        currentTimeText.setVisibility(
-                View.VISIBLE
-        );
-
-        totalTimeText.setVisibility(
-                View.VISIBLE
-        );
-
-        progressBar.setVisibility(
-                View.VISIBLE
-        );
-
-        handler.removeCallbacks(
-                hideControlsRunnable
-        );
-
-        handler.postDelayed(
-                hideControlsRunnable,
-                2000
-        );
-    }
-
-    private void hideControls() {
-
-        controlsVisible = false;
-
-        // अब चारों controls छिपेंगे
-        playPauseButton.setVisibility(
-                View.GONE
-        );
-
-        currentTimeText.setVisibility(
-                View.GONE
-        );
-
-        totalTimeText.setVisibility(
-                View.GONE
-        );
-
-        progressBar.setVisibility(
-                View.GONE
-        );
-    }
-
-    // ================================================================
-    // TIME
-    // ================================================================
-
-    private void showTime(
-            int current,
-            int total) {
-
-        currentTimeText.setText(
-                formatTime(current)
-        );
-
-        totalTimeText.setText(
-                formatTime(total)
-        );
-    }
-
-    private String formatTime(
-            int milliseconds) {
-
-        int totalSeconds =
-                milliseconds / 1000;
-
-        int hours =
-                totalSeconds / 3600;
-
-        int minutes =
-                (totalSeconds % 3600) / 60;
-
-        int seconds =
-                totalSeconds % 60;
-
-        if (hours > 0) {
-
-            return String.format(
-                    "%02d:%02d:%02d",
-                    hours,
-                    minutes,
-                    seconds
-            );
-
-        } else {
-
-            return String.format(
-                    "%02d:%02d",
-                    minutes,
-                    seconds
-            );
-        }
-    }
-
-    // ================================================================
-    // ZOOM
-    // ================================================================
-
-    private float distanceBetweenFingers(
-            MotionEvent event) {
-
-        if (event.getPointerCount() < 2) {
-            return 0;
-        }
-
-        float x =
-                event.getX(0) -
-                event.getX(1);
-
-        float y =
-                event.getY(0) -
-                event.getY(1);
-
-        return (float) Math.sqrt(
-                x * x + y * y
-        );
     }
 
     private void applyZoom() {
@@ -907,59 +1024,59 @@ public class VideoPlayerActivity extends Activity
         if (screenWidth <= 0 ||
                 screenHeight <= 0) {
 
+            surfaceView.post(
+                    this::applyZoom
+            );
+
             return;
         }
 
         float videoRatio =
                 (float) videoWidth /
-                (float) videoHeight;
+                        (float) videoHeight;
 
         float screenRatio =
                 (float) screenWidth /
-                (float) screenHeight;
+                        (float) screenHeight;
 
-        int baseWidth;
-        int baseHeight;
+        int targetWidth;
+        int targetHeight;
 
         if (videoRatio > screenRatio) {
 
-            baseWidth =
+            targetWidth =
                     screenWidth;
 
-            baseHeight =
-                    (int) (
-                            screenWidth /
-                            videoRatio
-                    );
+            targetHeight =
+                    (int)
+                            (screenWidth /
+                                    videoRatio);
 
         } else {
 
-            baseHeight =
+            targetHeight =
                     screenHeight;
 
-            baseWidth =
-                    (int) (
-                            screenHeight *
-                            videoRatio
-                    );
+            targetWidth =
+                    (int)
+                            (screenHeight *
+                                    videoRatio);
         }
 
-        int newWidth =
-                (int) (
-                        baseWidth *
-                        zoomFactor
-                );
+        targetWidth =
+                (int)
+                        (targetWidth *
+                                zoomFactor);
 
-        int newHeight =
-                (int) (
-                        baseHeight *
-                        zoomFactor
-                );
+        targetHeight =
+                (int)
+                        (targetHeight *
+                                zoomFactor);
 
         FrameLayout.LayoutParams params =
                 new FrameLayout.LayoutParams(
-                        newWidth,
-                        newHeight
+                        targetWidth,
+                        targetHeight
                 );
 
         params.gravity =
@@ -970,13 +1087,95 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    // ================================================================
-    // RELEASE PLAYER
-    // ================================================================
+    private void showTime(
+            int current,
+            int total
+    ) {
+
+        if (currentTimeText != null) {
+
+            currentTimeText.setText(
+                    formatTime(current)
+            );
+        }
+
+        if (totalTimeText != null) {
+
+            totalTimeText.setText(
+                    formatTime(total)
+            );
+        }
+    }
+
+    private String formatTime(
+            int milliseconds
+    ) {
+
+        int totalSeconds =
+                milliseconds / 1000;
+
+        int minutes =
+                totalSeconds / 60;
+
+        int seconds =
+                totalSeconds % 60;
+
+        return String.format(
+                java.util.Locale.getDefault(),
+                "%02d:%02d",
+                minutes,
+                seconds
+        );
+    }
+
+    /*
+     * PHASE-2A
+     * Expiry होने पर playback पूरी तरह बंद।
+     */
+    private void expirePlayback() {
+
+        if (expiryHandled) {
+            return;
+        }
+
+        expiryHandled = true;
+
+        handler.removeCallbacks(
+                expiryCheckRunnable
+        );
+
+        handler.removeCallbacks(
+                hideControlsRunnable
+        );
+
+        if (mediaPlayer != null) {
+
+            try {
+
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.pause();
+                }
+
+            } catch (Exception ignored) {
+            }
+        }
+
+        releasePlayer();
+
+        new AlertDialog.Builder(this)
+                .setTitle("Vishal Secure")
+                .setMessage(
+                        "Secure content की expiry हो चुकी है।"
+                )
+                .setCancelable(false)
+                .setPositiveButton(
+                        "OK",
+                        (dialog, which) -> finish()
+                )
+                .show();
+    }
 
     private void releasePlayer() {
-
-        playerPrepared = false;
 
         if (mediaPlayer != null) {
 
@@ -997,11 +1196,9 @@ public class VideoPlayerActivity extends Activity
 
             mediaPlayer = null;
         }
-    }
 
-    // ================================================================
-    // PAUSE
-    // ================================================================
+        playerPrepared = false;
+    }
 
     @Override
     protected void onPause() {
@@ -1009,7 +1206,8 @@ public class VideoPlayerActivity extends Activity
         super.onPause();
 
         if (mediaPlayer != null &&
-                playerPrepared) {
+                playerPrepared &&
+                !expiryHandled) {
 
             try {
 
@@ -1017,9 +1215,9 @@ public class VideoPlayerActivity extends Activity
 
                     mediaPlayer.pause();
 
-                    playPauseButton.setText(
-                            "▶"
-                    );
+                    if (playPauseButton != null) {
+                        playPauseButton.setText("▶");
+                    }
                 }
 
             } catch (Exception ignored) {
@@ -1027,15 +1225,15 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ================================================================
-    // DESTROY
-    // ================================================================
-
     @Override
     protected void onDestroy() {
 
         handler.removeCallbacks(
                 updateProgressRunnable
+        );
+
+        handler.removeCallbacks(
+                expiryCheckRunnable
         );
 
         handler.removeCallbacks(
