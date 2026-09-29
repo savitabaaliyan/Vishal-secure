@@ -415,7 +415,6 @@ public class VideoPlayerActivity extends Activity
         playPauseButton.setTextColor(Color.WHITE);
         playPauseButton.setTextSize(25);
 
-        // हल्का पारदर्शी गोल background
         GradientDrawable buttonBackground =
                 new GradientDrawable();
 
@@ -675,6 +674,7 @@ public class VideoPlayerActivity extends Activity
                                         "❚❚"
                                 );
 
+                                // Controls initially visible
                                 showControls();
 
                             } catch (Exception ignored) {
@@ -796,23 +796,21 @@ public class VideoPlayerActivity extends Activity
 
         controlsVisible = false;
 
-        // केवल Play/Pause छुपेगा।
-        // Timeline और time हमेशा दिखाई देंगे।
-
+        // अब चारों controls छिपेंगे
         playPauseButton.setVisibility(
                 View.GONE
         );
 
         currentTimeText.setVisibility(
-                View.VISIBLE
+                View.GONE
         );
 
         totalTimeText.setVisibility(
-                View.VISIBLE
+                View.GONE
         );
 
         progressBar.setVisibility(
-                View.VISIBLE
+                View.GONE
         );
     }
 
