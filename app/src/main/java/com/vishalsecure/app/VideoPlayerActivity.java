@@ -126,14 +126,15 @@ public class VideoPlayerActivity extends Activity
 
         root.setBackgroundColor(Color.BLACK);
 
-        // ============================================
+        // =====================================================
         // VIDEO SURFACE
-        // ============================================
+        // IMPORTANT:
+        // setZOrderMediaOverlay(true) intentionally removed
+        // =====================================================
 
         surfaceView =
                 new SurfaceView(this);
 
-        surfaceView.setZOrderMediaOverlay(true);
         surfaceView.setSecure(true);
         surfaceView.setKeepScreenOn(true);
 
@@ -155,9 +156,9 @@ public class VideoPlayerActivity extends Activity
                 surfaceParams
         );
 
-        // ============================================
+        // =====================================================
         // TOUCH AREA
-        // ============================================
+        // =====================================================
 
         TextView touchView =
                 new TextView(this);
@@ -177,9 +178,9 @@ public class VideoPlayerActivity extends Activity
                 touchParams
         );
 
-        // ============================================
-        // STATUS TEXT
-        // ============================================
+        // =====================================================
+        // STATUS
+        // =====================================================
 
         statusText =
                 new TextView(this);
@@ -203,9 +204,9 @@ public class VideoPlayerActivity extends Activity
                 statusParams
         );
 
-        // ============================================
-        // CURRENT TIME - LEFT SIDE
-        // ============================================
+        // =====================================================
+        // CURRENT TIME - LEFT
+        // =====================================================
 
         currentTimeText =
                 new TextView(this);
@@ -240,9 +241,9 @@ public class VideoPlayerActivity extends Activity
                 currentTimeParams
         );
 
-        // ============================================
-        // TOTAL TIME - RIGHT SIDE
-        // ============================================
+        // =====================================================
+        // TOTAL TIME - RIGHT
+        // =====================================================
 
         totalTimeText =
                 new TextView(this);
@@ -277,9 +278,9 @@ public class VideoPlayerActivity extends Activity
                 totalTimeParams
         );
 
-        // ============================================
+        // =====================================================
         // SEEK BAR
-        // ============================================
+        // =====================================================
 
         progressBar =
                 new SeekBar(this);
@@ -306,9 +307,9 @@ public class VideoPlayerActivity extends Activity
                 progressParams
         );
 
-        // ============================================
+        // =====================================================
         // REWIND 10 SEC
-        // ============================================
+        // =====================================================
 
         rewindButton =
                 new Button(this);
@@ -352,9 +353,9 @@ public class VideoPlayerActivity extends Activity
                 }
         );
 
-        // ============================================
+        // =====================================================
         // PLAY / PAUSE
-        // ============================================
+        // =====================================================
 
         playPauseButton =
                 new Button(this);
@@ -422,9 +423,9 @@ public class VideoPlayerActivity extends Activity
                 }
         );
 
-        // ============================================
+        // =====================================================
         // FORWARD 10 SEC
-        // ============================================
+        // =====================================================
 
         forwardButton =
                 new Button(this);
@@ -469,9 +470,9 @@ public class VideoPlayerActivity extends Activity
                 }
         );
 
-        // ============================================
+        // =====================================================
         // SEEK BAR LISTENER
-        // ============================================
+        // =====================================================
 
         progressBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -531,9 +532,9 @@ public class VideoPlayerActivity extends Activity
                 }
         );
 
-        // ============================================
-        // TOUCH / GESTURE
-        // ============================================
+        // =====================================================
+        // TOUCH / GESTURES
+        // =====================================================
 
         touchView.setOnTouchListener(
                 new View.OnTouchListener() {
@@ -673,9 +674,9 @@ public class VideoPlayerActivity extends Activity
         setContentView(root);
     }
 
-    // ============================================
+    // =====================================================
     // DISTANCE
-    // ============================================
+    // =====================================================
 
     private float distance(
             MotionEvent event) {
@@ -698,9 +699,9 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    // ============================================
+    // =====================================================
     // SEEK
-    // ============================================
+    // =====================================================
 
     private void seekBy(int amount) {
 
@@ -739,9 +740,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // PLAYBACK SPEED
-    // ============================================
+    // =====================================================
 
     private void changePlaybackSpeed() {
 
@@ -785,9 +786,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // SURFACE CREATED
-    // ============================================
+    // =====================================================
 
     @Override
     public void surfaceCreated(
@@ -827,9 +828,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // PREPARE PLAYER
-    // ============================================
+    // =====================================================
 
     private void preparePlayer() {
 
@@ -956,9 +957,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // RESIZE VIDEO
-    // ============================================
+    // =====================================================
 
     private void resizeVideo() {
 
@@ -1106,9 +1107,9 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    // ============================================
+    // =====================================================
     // UPDATE PROGRESS
-    // ============================================
+    // =====================================================
 
     private void updateProgress() {
 
@@ -1154,9 +1155,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // SHOW TIME
-    // ============================================
+    // =====================================================
 
     private void showTime() {
 
@@ -1187,9 +1188,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // FORMAT TIME
-    // ============================================
+    // =====================================================
 
     private String formatTime(
             int milliseconds) {
@@ -1229,9 +1230,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // SHOW CONTROLS
-    // ============================================
+    // =====================================================
 
     private void showControls() {
 
@@ -1259,11 +1260,11 @@ public class VideoPlayerActivity extends Activity
                 View.VISIBLE
         );
 
-        playPauseButton.setVisibility(
+        rewindButton.setVisibility(
                 View.VISIBLE
         );
 
-        rewindButton.setVisibility(
+        playPauseButton.setVisibility(
                 View.VISIBLE
         );
 
@@ -1271,9 +1272,15 @@ public class VideoPlayerActivity extends Activity
                 View.VISIBLE
         );
 
+        // =================================================
+        // CONTROLS को सबसे ऊपर रखें
+        // =================================================
+
         currentTimeText.bringToFront();
         totalTimeText.bringToFront();
+
         progressBar.bringToFront();
+
         rewindButton.bringToFront();
         playPauseButton.bringToFront();
         forwardButton.bringToFront();
@@ -1290,9 +1297,9 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    // ============================================
+    // =====================================================
     // HIDE CONTROLS
-    // ============================================
+    // =====================================================
 
     private void hideControls() {
 
@@ -1320,11 +1327,11 @@ public class VideoPlayerActivity extends Activity
                 View.GONE
         );
 
-        playPauseButton.setVisibility(
+        rewindButton.setVisibility(
                 View.GONE
         );
 
-        rewindButton.setVisibility(
+        playPauseButton.setVisibility(
                 View.GONE
         );
 
@@ -1333,9 +1340,9 @@ public class VideoPlayerActivity extends Activity
         );
     }
 
-    // ============================================
+    // =====================================================
     // RESUME
-    // ============================================
+    // =====================================================
 
     @Override
     protected void onResume() {
@@ -1351,9 +1358,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // WINDOW FOCUS
-    // ============================================
+    // =====================================================
 
     @Override
     public void onWindowFocusChanged(
@@ -1368,9 +1375,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // RELEASE PLAYER
-    // ============================================
+    // =====================================================
 
     private void releasePlayer() {
 
@@ -1395,9 +1402,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // PAUSE
-    // ============================================
+    // =====================================================
 
     @Override
     protected void onPause() {
@@ -1425,9 +1432,9 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ============================================
+    // =====================================================
     // DESTROY
-    // ============================================
+    // =====================================================
 
     @Override
     protected void onDestroy() {
