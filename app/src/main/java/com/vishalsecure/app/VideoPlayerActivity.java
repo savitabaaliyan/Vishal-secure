@@ -21,6 +21,10 @@ import android.widget.FrameLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import java.io.File;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class VideoPlayerActivity extends Activity
         implements SurfaceHolder.Callback {
 
@@ -38,6 +42,8 @@ public class VideoPlayerActivity extends Activity
     private SeekBar progressBar;
 
     private String videoUriString;
+
+    private boolean encryptedVideo = false;
 
     private boolean surfaceReady = false;
     private boolean playerPrepared = false;
@@ -60,9 +66,22 @@ public class VideoPlayerActivity extends Activity
     private final Handler handler =
             new Handler();
 
+    /*
+     * Encryption/decryption background worker.
+     */
+    private final ExecutorService cryptoExecutor =
+            Executors.newSingleThreadExecutor();
+
+    /*
+     * Temporary decrypted video.
+     */
+    private File temporaryDecryptedFile = null;
+
     private long expiryTime = 0L;
 
     private boolean expiryHandled = false;
+
+    private boolean decrypting = false;
 
     private final Runnable updateProgressRunnable =
             new Runnable() {
@@ -109,8 +128,7 @@ public class VideoPlayerActivity extends Activity
             };
 
     /*
-     * PHASE-2A
-     * हर 1 सेकंड में expiry check होगी।
+     * Expiry को हर 1 सेकंड check करना।
      */
     private final Runnable expiryCheckRunnable =
             new Runnable() {
@@ -136,7 +154,10 @@ public class VideoPlayerActivity extends Activity
             };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(
+            Bundle savedInstanceState
+    ) {
+
         super.onCreate(savedInstanceState);
 
         requestWindowFeature(
@@ -148,6 +169,9 @@ public class VideoPlayerActivity extends Activity
                 WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
 
+        /*
+         * Screenshot / screen recording protection.
+         */
         getWindow().setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -167,13 +191,21 @@ public class VideoPlayerActivity extends Activity
                 );
 
         /*
-         * PHASE-2A
-         * MainActivity से expiry time लेना।
+         * Phase-2A expiry.
          */
         expiryTime =
                 getIntent().getLongExtra(
                         "expiry_time",
                         0L
+                );
+
+        /*
+         * Phase-2B encrypted flag.
+         */
+        encryptedVideo =
+                getIntent().getBooleanExtra(
+                        "encrypted_video",
+                        false
                 );
 
         buildUI();
@@ -213,6 +245,9 @@ public class VideoPlayerActivity extends Activity
                 Color.BLACK
         );
 
+        /*
+         * Video surface.
+         */
         surfaceView =
                 new SurfaceView(this);
 
@@ -329,7 +364,9 @@ public class VideoPlayerActivity extends Activity
         progressBar =
                 new SeekBar(this);
 
-        progressBar.setMax(1000);
+        progressBar.setMax(
+                1000
+        );
 
         progressBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -424,14 +461,18 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * Play/Pause button.
+         * Play / Pause button.
          */
         playPauseButton =
                 new Button(this);
 
-        playPauseButton.setText("▶");
+        playPauseButton.setText(
+                "▶"
+        );
 
-        playPauseButton.setTextSize(22);
+        playPauseButton.setTextSize(
+                22
+        );
 
         playPauseButton.setTextColor(
                 Color.WHITE
@@ -494,7 +535,7 @@ public class VideoPlayerActivity extends Activity
         );
 
         /*
-         * Status.
+         * Status text.
          */
         statusText =
                 new TextView(this);
@@ -503,7 +544,9 @@ public class VideoPlayerActivity extends Activity
                 Color.WHITE
         );
 
-        statusText.setTextSize(16);
+        statusText.setTextSize(
+                16
+        );
 
         statusText.setGravity(
                 Gravity.CENTER
@@ -523,12 +566,11 @@ public class VideoPlayerActivity extends Activity
                 statusParams
         );
 
-        /*
-         * Controls शुरुआत में hidden.
-         */
         hideControls();
 
-        setContentView(rootLayout);
+        setContentView(
+                rootLayout
+        );
     }
 
     private TextView createTimeText() {
@@ -540,13 +582,17 @@ public class VideoPlayerActivity extends Activity
                 Color.WHITE
         );
 
-        text.setTextSize(14);
+        text.setTextSize(
+                14
+        );
 
         text.setGravity(
                 Gravity.CENTER
         );
 
-        text.setText("00:00");
+        text.setText(
+                "00:00"
+        );
 
         return text;
     }
@@ -562,7 +608,9 @@ public class VideoPlayerActivity extends Activity
             return;
         }
 
-        switch (event.getActionMasked()) {
+        switch (
+                event.getActionMasked()
+        ) {
 
             case MotionEvent.ACTION_DOWN:
 
@@ -579,7 +627,8 @@ public class VideoPlayerActivity extends Activity
                         <= DOUBLE_TAP_TIME) {
 
                     if (lastTapX <
-                            rootLayout.getWidth() / 2f) {
+                            rootLayout.getWidth()
+                                    / 2f) {
 
                         seekRelative(
                                 -SEEK_MS
@@ -592,11 +641,13 @@ public class VideoPlayerActivity extends Activity
                         );
                     }
 
-                    lastTapTime = 0L;
+                    lastTapTime =
+                            0L;
 
                 } else {
 
-                    lastTapTime = now;
+                    lastTapTime =
+                            now;
 
                     showControls();
                 }
@@ -605,7 +656,8 @@ public class VideoPlayerActivity extends Activity
 
             case MotionEvent.ACTION_POINTER_DOWN:
 
-                if (event.getPointerCount() >= 2) {
+                if (event.getPointerCount()
+                        >= 2) {
 
                     initialDistance =
                             distanceBetweenFingers(
@@ -617,7 +669,8 @@ public class VideoPlayerActivity extends Activity
 
             case MotionEvent.ACTION_MOVE:
 
-                if (event.getPointerCount() >= 2 &&
+                if (event.getPointerCount()
+                        >= 2 &&
                         initialDistance > 0) {
 
                     float currentDistance =
@@ -634,7 +687,8 @@ public class VideoPlayerActivity extends Activity
                                     1.0f,
                                     Math.min(
                                             3.0f,
-                                            zoomFactor * scale
+                                            zoomFactor *
+                                                    scale
                                     )
                             );
 
@@ -648,7 +702,8 @@ public class VideoPlayerActivity extends Activity
 
             case MotionEvent.ACTION_POINTER_UP:
 
-                initialDistance = 0;
+                initialDistance =
+                        0;
 
                 break;
         }
@@ -658,7 +713,9 @@ public class VideoPlayerActivity extends Activity
             MotionEvent event
     ) {
 
-        if (event.getPointerCount() < 2) {
+        if (event.getPointerCount()
+                < 2) {
+
             return 0;
         }
 
@@ -671,7 +728,8 @@ public class VideoPlayerActivity extends Activity
                         event.getY(1);
 
         return (float) Math.sqrt(
-                dx * dx + dy * dy
+                dx * dx +
+                        dy * dy
         );
     }
 
@@ -681,7 +739,8 @@ public class VideoPlayerActivity extends Activity
             return;
         }
 
-        controlsVisible = true;
+        controlsVisible =
+                true;
 
         playPauseButton.setVisibility(
                 View.VISIBLE
@@ -700,8 +759,11 @@ public class VideoPlayerActivity extends Activity
         );
 
         playPauseButton.bringToFront();
+
         currentTimeText.bringToFront();
+
         totalTimeText.bringToFront();
+
         progressBar.bringToFront();
 
         handler.removeCallbacks(
@@ -724,7 +786,8 @@ public class VideoPlayerActivity extends Activity
 
     private void hideControls() {
 
-        controlsVisible = false;
+        controlsVisible =
+                false;
 
         if (playPauseButton != null) {
 
@@ -776,13 +839,17 @@ public class VideoPlayerActivity extends Activity
 
                 mediaPlayer.pause();
 
-                playPauseButton.setText("▶");
+                playPauseButton.setText(
+                        "▶"
+                );
 
             } else {
 
                 mediaPlayer.start();
 
-                playPauseButton.setText("Ⅱ");
+                playPauseButton.setText(
+                        "Ⅱ"
+                );
             }
 
             showControls();
@@ -817,7 +884,8 @@ public class VideoPlayerActivity extends Activity
                     mediaPlayer.getDuration();
 
             int target =
-                    current + milliseconds;
+                    current +
+                            milliseconds;
 
             target =
                     Math.max(
@@ -828,7 +896,9 @@ public class VideoPlayerActivity extends Activity
                             )
                     );
 
-            mediaPlayer.seekTo(target);
+            mediaPlayer.seekTo(
+                    target
+            );
 
             showTime(
                     target,
@@ -846,7 +916,8 @@ public class VideoPlayerActivity extends Activity
             SurfaceHolder holder
     ) {
 
-        surfaceReady = true;
+        surfaceReady =
+                true;
 
         if (isExpired()) {
 
@@ -872,9 +943,13 @@ public class VideoPlayerActivity extends Activity
             SurfaceHolder holder
     ) {
 
-        surfaceReady = false;
+        surfaceReady =
+                false;
     }
 
+    /*
+     * Player preparation.
+     */
     private void preparePlayer() {
 
         if (expiryHandled ||
@@ -895,7 +970,184 @@ public class VideoPlayerActivity extends Activity
             return;
         }
 
-        releasePlayer();
+        /*
+         * Encrypted video होने पर पहले
+         * temporary decrypted file बनानी होगी।
+         */
+        if (encryptedVideo) {
+
+            decryptVideoAndPrepare();
+
+        } else {
+
+            prepareMediaPlayer(
+                    Uri.parse(
+                            videoUriString
+                    )
+            );
+        }
+    }
+
+    /*
+     * AES-GCM encrypted .vsec file को
+     * temporary file में decrypt करना।
+     */
+    private void decryptVideoAndPrepare() {
+
+        if (decrypting ||
+                expiryHandled) {
+
+            return;
+        }
+
+        decrypting =
+                true;
+
+        statusText.setText(
+                "Secure video preparing..."
+        );
+
+        cryptoExecutor.execute(
+                () -> {
+
+                    File encryptedFile =
+                            null;
+
+                    File decryptedFile =
+                            null;
+
+                    boolean success =
+                            false;
+
+                    try {
+
+                        Uri encryptedUri =
+                                Uri.parse(
+                                        videoUriString
+                                );
+
+                        String path =
+                                encryptedUri.getPath();
+
+                        if (path == null ||
+                                path.trim().isEmpty()) {
+
+                            throw new Exception(
+                                    "Encrypted file path missing"
+                            );
+                        }
+
+                        encryptedFile =
+                                new File(path);
+
+                        if (!encryptedFile.exists()) {
+
+                            throw new Exception(
+                                    "Encrypted file not found"
+                            );
+                        }
+
+                        /*
+                         * Temporary file app cache में।
+                         */
+                        decryptedFile =
+                                new File(
+                                        getCacheDir(),
+                                        "vs_play_" +
+                                                System.currentTimeMillis() +
+                                                ".mp4"
+                                );
+
+                        success =
+                                CryptoManager.decryptFile(
+                                        encryptedFile,
+                                        decryptedFile
+                                );
+
+                    } catch (Exception ignored) {
+
+                        success =
+                                false;
+                    }
+
+                    final File finalDecryptedFile =
+                            decryptedFile;
+
+                    final boolean finalSuccess =
+                            success;
+
+                    runOnUiThread(
+                            () -> {
+
+                                decrypting =
+                                        false;
+
+                                if (expiryHandled) {
+
+                                    deleteTemporaryFile(
+                                            finalDecryptedFile
+                                    );
+
+                                    return;
+                                }
+
+                                if (isExpired()) {
+
+                                    deleteTemporaryFile(
+                                            finalDecryptedFile
+                                    );
+
+                                    expirePlayback();
+
+                                    return;
+                                }
+
+                                if (!finalSuccess ||
+                                        finalDecryptedFile == null ||
+                                        !finalDecryptedFile.exists()) {
+
+                                    statusText.setText(
+                                            "Secure video error"
+                                    );
+
+                                    deleteTemporaryFile(
+                                            finalDecryptedFile
+                                    );
+
+                                    return;
+                                }
+
+                                temporaryDecryptedFile =
+                                        finalDecryptedFile;
+
+                                prepareMediaPlayer(
+                                        Uri.fromFile(
+                                                finalDecryptedFile
+                                        )
+                                );
+                            }
+                    );
+                }
+        );
+    }
+
+    /*
+     * MediaPlayer को normal temporary/private
+     * file से तैयार करना।
+     */
+    private void prepareMediaPlayer(
+            Uri videoUri
+    ) {
+
+        if (expiryHandled ||
+                isExpired()) {
+
+            expirePlayback();
+
+            return;
+        }
+
+        releasePlayerOnly();
 
         try {
 
@@ -905,11 +1157,6 @@ public class VideoPlayerActivity extends Activity
             mediaPlayer.setAudioStreamType(
                     AudioManager.STREAM_MUSIC
             );
-
-            Uri videoUri =
-                    Uri.parse(
-                            videoUriString
-                    );
 
             mediaPlayer.setDataSource(
                     this,
@@ -930,7 +1177,8 @@ public class VideoPlayerActivity extends Activity
                             return;
                         }
 
-                        playerPrepared = true;
+                        playerPrepared =
+                                true;
 
                         videoWidth =
                                 mp.getVideoWidth();
@@ -946,14 +1194,20 @@ public class VideoPlayerActivity extends Activity
                         );
 
                         totalTimeText.setText(
-                                formatTime(duration)
+                                formatTime(
+                                        duration
+                                )
+                        );
+
+                        statusText.setText(
+                                ""
                         );
 
                         applyZoom();
 
                         /*
-                         * Expiry check ठीक
-                         * start से पहले भी।
+                         * Expiry check playback शुरू
+                         * होने से ठीक पहले भी।
                          */
                         if (isExpired()) {
 
@@ -1049,8 +1303,10 @@ public class VideoPlayerActivity extends Activity
 
             targetHeight =
                     (int)
-                            (screenWidth /
-                                    videoRatio);
+                            (
+                                    screenWidth /
+                                            videoRatio
+                            );
 
         } else {
 
@@ -1059,19 +1315,25 @@ public class VideoPlayerActivity extends Activity
 
             targetWidth =
                     (int)
-                            (screenHeight *
-                                    videoRatio);
+                            (
+                                    screenHeight *
+                                            videoRatio
+                            );
         }
 
         targetWidth =
                 (int)
-                        (targetWidth *
-                                zoomFactor);
+                        (
+                                targetWidth *
+                                        zoomFactor
+                        );
 
         targetHeight =
                 (int)
-                        (targetHeight *
-                                zoomFactor);
+                        (
+                                targetHeight *
+                                        zoomFactor
+                        );
 
         FrameLayout.LayoutParams params =
                 new FrameLayout.LayoutParams(
@@ -1095,14 +1357,18 @@ public class VideoPlayerActivity extends Activity
         if (currentTimeText != null) {
 
             currentTimeText.setText(
-                    formatTime(current)
+                    formatTime(
+                            current
+                    )
             );
         }
 
         if (totalTimeText != null) {
 
             totalTimeText.setText(
-                    formatTime(total)
+                    formatTime(
+                            total
+                    )
             );
         }
     }
@@ -1112,13 +1378,16 @@ public class VideoPlayerActivity extends Activity
     ) {
 
         int totalSeconds =
-                milliseconds / 1000;
+                milliseconds /
+                        1000;
 
         int minutes =
-                totalSeconds / 60;
+                totalSeconds /
+                        60;
 
         int seconds =
-                totalSeconds % 60;
+                totalSeconds %
+                        60;
 
         return String.format(
                 java.util.Locale.getDefault(),
@@ -1129,8 +1398,13 @@ public class VideoPlayerActivity extends Activity
     }
 
     /*
-     * PHASE-2A
-     * Expiry होने पर playback पूरी तरह बंद।
+     * Expiry होने पर:
+     *
+     * 1. playback बंद
+     * 2. temporary decrypted file delete
+     * 3. player release
+     * 4. user को message
+     * 5. OK पर वापस MainActivity
      */
     private void expirePlayback() {
 
@@ -1138,7 +1412,8 @@ public class VideoPlayerActivity extends Activity
             return;
         }
 
-        expiryHandled = true;
+        expiryHandled =
+                true;
 
         handler.removeCallbacks(
                 expiryCheckRunnable
@@ -1160,22 +1435,35 @@ public class VideoPlayerActivity extends Activity
             }
         }
 
-        releasePlayer();
+        releasePlayerOnly();
+
+        deleteTemporaryFile(
+                temporaryDecryptedFile
+        );
+
+        temporaryDecryptedFile =
+                null;
 
         new AlertDialog.Builder(this)
-                .setTitle("Vishal Secure")
+                .setTitle(
+                        "Vishal Secure"
+                )
                 .setMessage(
                         "Secure content की expiry हो चुकी है।"
                 )
                 .setCancelable(false)
                 .setPositiveButton(
                         "OK",
-                        (dialog, which) -> finish()
+                        (dialog, which) ->
+                                finish()
                 )
                 .show();
     }
 
-    private void releasePlayer() {
+    /*
+     * सिर्फ MediaPlayer release।
+     */
+    private void releasePlayerOnly() {
 
         if (mediaPlayer != null) {
 
@@ -1194,10 +1482,33 @@ public class VideoPlayerActivity extends Activity
             } catch (Exception ignored) {
             }
 
-            mediaPlayer = null;
+            mediaPlayer =
+                    null;
         }
 
-        playerPrepared = false;
+        playerPrepared =
+                false;
+    }
+
+    /*
+     * Temporary decrypted file delete।
+     */
+    private void deleteTemporaryFile(
+            File file
+    ) {
+
+        if (file == null) {
+            return;
+        }
+
+        try {
+
+            if (file.exists()) {
+                file.delete();
+            }
+
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -1216,7 +1527,10 @@ public class VideoPlayerActivity extends Activity
                     mediaPlayer.pause();
 
                     if (playPauseButton != null) {
-                        playPauseButton.setText("▶");
+
+                        playPauseButton.setText(
+                                "▶"
+                        );
                     }
                 }
 
@@ -1240,7 +1554,23 @@ public class VideoPlayerActivity extends Activity
                 hideControlsRunnable
         );
 
-        releasePlayer();
+        releasePlayerOnly();
+
+        /*
+         * Temporary decrypted copy delete।
+         */
+        deleteTemporaryFile(
+                temporaryDecryptedFile
+        );
+
+        temporaryDecryptedFile =
+                null;
+
+        /*
+         * Background encryption/decryption
+         * worker बंद।
+         */
+        cryptoExecutor.shutdownNow();
 
         super.onDestroy();
     }
