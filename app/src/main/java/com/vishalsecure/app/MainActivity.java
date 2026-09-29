@@ -16,6 +16,8 @@ import android.net.Uri;
 
 import android.os.Bundle;
 
+import android.text.InputType;
+
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -45,6 +47,12 @@ public class MainActivity extends Activity {
 
     private static final String KEY_VIDEO_COUNT =
             "video_count";
+
+    private static final String KEY_RECEIVER_NAME =
+            "receiver_name";
+
+    private static final String KEY_RECEIVER_MOBILE =
+            "receiver_mobile";
 
 
     private LinearLayout rootLayout;
@@ -93,7 +101,10 @@ public class MainActivity extends Activity {
                 );
 
 
+        loadReceiverDetails();
+
         loadExpiry();
+
         loadVideos();
 
         buildMainScreen();
@@ -246,7 +257,7 @@ public class MainActivity extends Activity {
         );
 
         receiverMobile.setInputType(
-                android.text.InputType.TYPE_CLASS_PHONE
+                InputType.TYPE_CLASS_PHONE
         );
 
         receiverMobile.setTextSize(16);
@@ -269,6 +280,46 @@ public class MainActivity extends Activity {
         rootLayout.addView(
                 receiverMobile,
                 mobileParams
+        );
+
+
+        // -----------------------------------------------------
+        // SAVE RECEIVER DETAILS
+        // -----------------------------------------------------
+
+        Button saveReceiverButton =
+                new Button(this);
+
+        saveReceiverButton.setText(
+                "SAVE RECEIVER"
+        );
+
+        saveReceiverButton.setAllCaps(
+                false
+        );
+
+        saveReceiverButton.setOnClickListener(
+                v -> saveReceiverDetails()
+        );
+
+
+        LinearLayout.LayoutParams saveReceiverParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+
+        saveReceiverParams.setMargins(
+                0,
+                0,
+                0,
+                dp(8)
+        );
+
+
+        rootLayout.addView(
+                saveReceiverButton,
+                saveReceiverParams
         );
 
 
@@ -379,9 +430,6 @@ public class MainActivity extends Activity {
         );
 
 
-        updateExpiryText();
-
-
         // -----------------------------------------------------
         // VIDEO LIST TITLE
         // -----------------------------------------------------
@@ -460,7 +508,138 @@ public class MainActivity extends Activity {
         );
 
 
+        // Show saved receiver information
+        loadReceiverIntoFields();
+
+        updateExpiryText();
+
         refreshVideoList();
+    }
+
+
+    // =========================================================
+    // SAVE RECEIVER DETAILS
+    // =========================================================
+
+    private void saveReceiverDetails() {
+
+        String name =
+                receiverName
+                        .getText()
+                        .toString()
+                        .trim();
+
+        String mobile =
+                receiverMobile
+                        .getText()
+                        .toString()
+                        .trim();
+
+
+        if (name.isEmpty()) {
+
+            showVideoError(
+                    "Receiver Name लिखिए।"
+            );
+
+            receiverName.requestFocus();
+
+            return;
+        }
+
+
+        if (mobile.isEmpty()) {
+
+            showVideoError(
+                    "Receiver Mobile लिखिए।"
+            );
+
+            receiverMobile.requestFocus();
+
+            return;
+        }
+
+
+        preferences.edit()
+
+                .putString(
+                        KEY_RECEIVER_NAME,
+                        name
+                )
+
+                .putString(
+                        KEY_RECEIVER_MOBILE,
+                        mobile
+                )
+
+                .apply();
+
+
+        new AlertDialog.Builder(this)
+
+                .setTitle(
+                        "Vishal Secure"
+                )
+
+                .setMessage(
+                        "Receiver details save हो गई हैं।"
+                )
+
+                .setPositiveButton(
+                        "OK",
+                        null
+                )
+
+                .show();
+    }
+
+
+    // =========================================================
+    // LOAD RECEIVER DETAILS
+    // =========================================================
+
+    private void loadReceiverDetails() {
+
+        // Values are loaded later into EditText fields
+        // after the main screen has been created.
+    }
+
+
+    // =========================================================
+    // LOAD RECEIVER INTO FIELDS
+    // =========================================================
+
+    private void loadReceiverIntoFields() {
+
+        if (receiverName == null ||
+                receiverMobile == null) {
+
+            return;
+        }
+
+
+        String savedName =
+                preferences.getString(
+                        KEY_RECEIVER_NAME,
+                        ""
+                );
+
+
+        String savedMobile =
+                preferences.getString(
+                        KEY_RECEIVER_MOBILE,
+                        ""
+                );
+
+
+        receiverName.setText(
+                savedName
+        );
+
+
+        receiverMobile.setText(
+                savedMobile
+        );
     }
 
 
@@ -617,10 +796,12 @@ public class MainActivity extends Activity {
 
 
                             preferences.edit()
+
                                     .putLong(
                                             KEY_EXPIRY_TIME,
                                             expiryTime
                                     )
+
                                     .apply();
 
 
@@ -865,12 +1046,166 @@ public class MainActivity extends Activity {
         );
 
 
+        // First use the original file name.
+        // It can be changed immediately through
+        // the custom-name dialog.
+        String originalName =
+                getVideoName(uri);
+
+
         videoNames.add(
-                getVideoName(uri)
+                originalName
         );
 
 
         saveVideos();
+
+
+        // Ask user for custom display name
+        showVideoNameDialog(
+                videoUris.size() - 1,
+                originalName
+        );
+    }
+
+
+    // =========================================================
+    // CUSTOM VIDEO NAME
+    // =========================================================
+
+    private void showVideoNameDialog(
+            int position,
+            String originalName
+    ) {
+
+        if (
+                position < 0
+                        ||
+                position >= videoNames.size()
+        ) {
+
+            return;
+        }
+
+
+        final EditText input =
+                new EditText(this);
+
+        input.setSingleLine(
+                true
+        );
+
+        input.setText(
+                originalName
+        );
+
+        input.setSelectAllOnFocus(
+                true
+        );
+
+        input.setHint(
+                "वीडियो का नाम"
+        );
+
+
+        LinearLayout container =
+                new LinearLayout(this);
+
+        container.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        container.setPadding(
+                dp(20),
+                dp(4),
+                dp(20),
+                0
+        );
+
+
+        container.addView(
+                input,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(this)
+
+                        .setTitle(
+                                "वीडियो का नाम"
+                        )
+
+                        .setMessage(
+                                "इस वीडियो के लिए अपना नाम लिखें।"
+                        )
+
+                        .setView(
+                                container
+                        )
+
+                        .setPositiveButton(
+                                "SAVE",
+                                null
+                        )
+
+                        .setNegativeButton(
+                                "CANCEL",
+                                null
+                        )
+
+                        .create();
+
+
+        dialog.setOnShowListener(
+                d -> {
+
+                    Button saveButton =
+                            dialog.getButton(
+                                    AlertDialog.BUTTON_POSITIVE
+                            );
+
+
+                    saveButton.setOnClickListener(
+                            v -> {
+
+                                String newName =
+                                        input.getText()
+                                                .toString()
+                                                .trim();
+
+
+                                if (newName.isEmpty()) {
+
+                                    input.setError(
+                                            "वीडियो का नाम लिखिए"
+                                    );
+
+                                    return;
+                                }
+
+
+                                videoNames.set(
+                                        position,
+                                        newName
+                                );
+
+
+                                saveVideos();
+
+                                refreshVideoList();
+
+                                dialog.dismiss();
+                            }
+                    );
+                }
+        );
+
+
+        dialog.show();
     }
 
 
@@ -1177,7 +1512,6 @@ public class MainActivity extends Activity {
                         }
 
 
-                        // Open the new secure video player
                         Intent intent =
                                 new Intent(
                                         MainActivity.this,
@@ -1351,7 +1685,6 @@ public class MainActivity extends Activity {
 
 
         saveVideos();
-
 
         refreshVideoList();
     }
