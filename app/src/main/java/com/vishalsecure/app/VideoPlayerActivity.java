@@ -37,6 +37,7 @@ public class VideoPlayerActivity extends Activity
     private String videoUriString;
 
     private boolean surfaceReady = false;
+    private boolean playerPrepared = false;
     private boolean controlsVisible = false;
     private boolean userSeeking = false;
 
@@ -53,34 +54,34 @@ public class VideoPlayerActivity extends Activity
 
     private final Handler handler = new Handler();
 
-    private final Runnable hideControlsRunnable = new Runnable() {
-        @Override
-        public void run() {
-            hideControls();
-        }
-    };
-
     private final Runnable updateProgressRunnable = new Runnable() {
         @Override
         public void run() {
 
-            if (mediaPlayer != null && mediaPlayer.isPrepared()) {
+            if (mediaPlayer != null && playerPrepared) {
 
                 try {
-                    int position = mediaPlayer.getCurrentPosition();
+                    int current = mediaPlayer.getCurrentPosition();
                     int duration = mediaPlayer.getDuration();
 
                     if (!userSeeking) {
-                        progressBar.setProgress(position);
+                        progressBar.setMax(duration);
+                        progressBar.setProgress(current);
+                        showTime(current, duration);
                     }
-
-                    showTime(position, duration);
 
                 } catch (Exception ignored) {
                 }
             }
 
             handler.postDelayed(this, 500);
+        }
+    };
+
+    private final Runnable hideControlsRunnable = new Runnable() {
+        @Override
+        public void run() {
+            hideControls();
         }
     };
 
@@ -100,7 +101,8 @@ public class VideoPlayerActivity extends Activity
                 WindowManager.LayoutParams.FLAG_SECURE
         );
 
-        hideSystemUI();
+        getWindow().setNavigationBarColor(Color.BLACK);
+        getWindow().setStatusBarColor(Color.BLACK);
 
         videoUriString = getIntent().getStringExtra("video_uri");
 
@@ -109,31 +111,21 @@ public class VideoPlayerActivity extends Activity
             return;
         }
 
-        createPlayerUI();
+        buildUI();
+
+        handler.post(updateProgressRunnable);
     }
 
-    private void hideSystemUI() {
-
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-        );
-    }
-
-    private void createPlayerUI() {
+    private void buildUI() {
 
         rootLayout = new FrameLayout(this);
         rootLayout.setBackgroundColor(Color.BLACK);
 
         setContentView(rootLayout);
 
-        // ------------------------------------------------
+        // ============================================================
         // VIDEO SURFACE
-        // ------------------------------------------------
+        // ============================================================
 
         surfaceView = new SurfaceView(this);
 
@@ -149,17 +141,17 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.MATCH_PARENT
                 );
 
+        videoParams.gravity = Gravity.CENTER;
+
         rootLayout.addView(surfaceView, videoParams);
 
-        // ------------------------------------------------
-        // TOUCH AREA
-        // ------------------------------------------------
+        // ============================================================
+        // TOUCH LAYER
+        // ============================================================
 
         TextView touchView = new TextView(this);
 
         touchView.setBackgroundColor(Color.TRANSPARENT);
-        touchView.setClickable(true);
-        touchView.setFocusable(false);
 
         FrameLayout.LayoutParams touchParams =
                 new FrameLayout.LayoutParams(
@@ -169,18 +161,88 @@ public class VideoPlayerActivity extends Activity
 
         rootLayout.addView(touchView, touchParams);
 
-        setupTouchControls(touchView);
+        touchView.setOnTouchListener(new View.OnTouchListener() {
 
-        // ------------------------------------------------
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+
+                switch (event.getActionMasked()) {
+
+                    case MotionEvent.ACTION_DOWN:
+
+                        downX = event.getX();
+                        downY = event.getY();
+
+                        showControls();
+
+                        return true;
+
+                    case MotionEvent.ACTION_POINTER_DOWN:
+
+                        if (event.getPointerCount() >= 2) {
+
+                            initialDistance = distanceBetweenFingers(event);
+                        }
+
+                        return true;
+
+                    case MotionEvent.ACTION_MOVE:
+
+                        if (event.getPointerCount() >= 2 &&
+                                initialDistance > 0) {
+
+                            float currentDistance =
+                                    distanceBetweenFingers(event);
+
+                            float scale =
+                                    currentDistance / initialDistance;
+
+                            zoomFactor = zoomFactor * scale;
+
+                            if (zoomFactor < 1.0f) {
+                                zoomFactor = 1.0f;
+                            }
+
+                            if (zoomFactor > 3.0f) {
+                                zoomFactor = 3.0f;
+                            }
+
+                            initialDistance = currentDistance;
+
+                            applyZoom();
+                        }
+
+                        return true;
+
+                    case MotionEvent.ACTION_POINTER_UP:
+
+                        initialDistance = 0;
+
+                        return true;
+
+                    case MotionEvent.ACTION_UP:
+
+                        initialDistance = 0;
+
+                        showControls();
+
+                        return true;
+                }
+
+                return true;
+            }
+        });
+
+        // ============================================================
         // CURRENT TIME
-        // ------------------------------------------------
+        // ============================================================
 
         currentTimeText = new TextView(this);
 
-        currentTimeText.setTextColor(Color.WHITE);
-        currentTimeText.setTextSize(13);
-        currentTimeText.setGravity(Gravity.CENTER);
         currentTimeText.setText("00:00");
+        currentTimeText.setTextColor(Color.WHITE);
+        currentTimeText.setTextSize(14);
+        currentTimeText.setGravity(Gravity.CENTER_VERTICAL);
 
         FrameLayout.LayoutParams currentParams =
                 new FrameLayout.LayoutParams(
@@ -188,22 +250,22 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        currentParams.gravity = Gravity.BOTTOM | Gravity.LEFT;
-        currentParams.leftMargin = 25;
+        currentParams.gravity = Gravity.START | Gravity.BOTTOM;
+        currentParams.leftMargin = 12;
         currentParams.bottomMargin = 72;
 
         rootLayout.addView(currentTimeText, currentParams);
 
-        // ------------------------------------------------
+        // ============================================================
         // TOTAL TIME
-        // ------------------------------------------------
+        // ============================================================
 
         totalTimeText = new TextView(this);
 
-        totalTimeText.setTextColor(Color.WHITE);
-        totalTimeText.setTextSize(13);
-        totalTimeText.setGravity(Gravity.CENTER);
         totalTimeText.setText("00:00");
+        totalTimeText.setTextColor(Color.WHITE);
+        totalTimeText.setTextSize(14);
+        totalTimeText.setGravity(Gravity.CENTER_VERTICAL);
 
         FrameLayout.LayoutParams totalParams =
                 new FrameLayout.LayoutParams(
@@ -211,33 +273,33 @@ public class VideoPlayerActivity extends Activity
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        totalParams.gravity = Gravity.BOTTOM | Gravity.RIGHT;
-        totalParams.rightMargin = 25;
+        totalParams.gravity = Gravity.END | Gravity.BOTTOM;
+        totalParams.rightMargin = 12;
         totalParams.bottomMargin = 72;
 
         rootLayout.addView(totalTimeText, totalParams);
 
-        // ------------------------------------------------
+        // ============================================================
         // TIMELINE
-        // ------------------------------------------------
+        // ============================================================
 
         progressBar = new SeekBar(this);
 
         progressBar.setMax(1000);
         progressBar.setProgress(0);
 
-        FrameLayout.LayoutParams seekParams =
+        FrameLayout.LayoutParams progressParams =
                 new FrameLayout.LayoutParams(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        seekParams.gravity = Gravity.BOTTOM;
-        seekParams.leftMargin = 20;
-        seekParams.rightMargin = 20;
-        seekParams.bottomMargin = 38;
+        progressParams.gravity = Gravity.BOTTOM;
+        progressParams.leftMargin = 8;
+        progressParams.rightMargin = 8;
+        progressParams.bottomMargin = 38;
 
-        rootLayout.addView(progressBar, seekParams);
+        rootLayout.addView(progressBar, progressParams);
 
         progressBar.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
@@ -250,20 +312,12 @@ public class VideoPlayerActivity extends Activity
 
                         if (fromUser &&
                                 mediaPlayer != null &&
-                                mediaPlayer.isPrepared()) {
+                                playerPrepared) {
 
-                            try {
-                                int duration = mediaPlayer.getDuration();
-
-                                int newPosition =
-                                        (int) ((progress / 1000.0f) * duration);
-
-                                currentTimeText.setText(
-                                        formatTime(newPosition)
-                                );
-
-                            } catch (Exception ignored) {
-                            }
+                            showTime(
+                                    progress,
+                                    mediaPlayer.getDuration()
+                            );
                         }
                     }
 
@@ -280,44 +334,38 @@ public class VideoPlayerActivity extends Activity
                             SeekBar seekBar) {
 
                         if (mediaPlayer != null &&
-                                mediaPlayer.isPrepared()) {
+                                playerPrepared) {
 
                             try {
-
-                                int duration =
-                                        mediaPlayer.getDuration();
-
-                                int newPosition =
-                                        (int) ((seekBar.getProgress()
-                                                / 1000.0f) * duration);
-
-                                mediaPlayer.seekTo(newPosition);
-
+                                mediaPlayer.seekTo(
+                                        seekBar.getProgress()
+                                );
                             } catch (Exception ignored) {
                             }
                         }
 
                         userSeeking = false;
+
                         showControls();
                     }
                 }
         );
 
-        // ------------------------------------------------
-        // PLAY / PAUSE ONLY
-        // ------------------------------------------------
+        // ============================================================
+        // PLAY / PAUSE BUTTON
+        // ============================================================
 
         playPauseButton = new Button(this);
 
         playPauseButton.setText("▶");
         playPauseButton.setTextColor(Color.WHITE);
-        playPauseButton.setTextSize(22);
+        playPauseButton.setTextSize(25);
 
         playPauseButton.setBackgroundColor(
-                Color.argb(190, 0, 0, 0)
+                Color.argb(180, 0, 0, 0)
         );
 
-        playPauseButton.setPadding(0, 0, 0, 0);
+        playPauseButton.setVisibility(View.GONE);
 
         FrameLayout.LayoutParams playParams =
                 new FrameLayout.LayoutParams(
@@ -325,20 +373,23 @@ public class VideoPlayerActivity extends Activity
                         75
                 );
 
-        playParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        playParams.bottomMargin = 0;
+        playParams.gravity =
+                Gravity.CENTER_HORIZONTAL |
+                Gravity.BOTTOM;
+
+        playParams.bottomMargin = 85;
 
         rootLayout.addView(playPauseButton, playParams);
 
-        playPauseButton.setVisibility(View.GONE);
-
         playPauseButton.setOnClickListener(
                 new View.OnClickListener() {
+
                     @Override
                     public void onClick(View v) {
 
                         if (mediaPlayer == null ||
-                                !mediaPlayer.isPrepared()) {
+                                !playerPrepared) {
+
                             return;
                         }
 
@@ -347,11 +398,13 @@ public class VideoPlayerActivity extends Activity
                             if (mediaPlayer.isPlaying()) {
 
                                 mediaPlayer.pause();
+
                                 playPauseButton.setText("▶");
 
                             } else {
 
                                 mediaPlayer.start();
+
                                 playPauseButton.setText("❚❚");
                             }
 
@@ -363,208 +416,35 @@ public class VideoPlayerActivity extends Activity
                 }
         );
 
-        // ------------------------------------------------
-        // STATUS
-        // ------------------------------------------------
+        // ============================================================
+        // STATUS TEXT
+        // ============================================================
 
         statusText = new TextView(this);
 
         statusText.setTextColor(Color.WHITE);
-        statusText.setTextSize(14);
+        statusText.setTextSize(15);
         statusText.setGravity(Gravity.CENTER);
+
         statusText.setVisibility(View.GONE);
 
         FrameLayout.LayoutParams statusParams =
                 new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.WRAP_CONTENT
                 );
 
         statusParams.gravity = Gravity.CENTER;
 
         rootLayout.addView(statusText, statusParams);
-
-        handler.post(updateProgressRunnable);
     }
 
-    // ====================================================
-    // TOUCH
-    // ====================================================
-
-    private void setupTouchControls(TextView touchView) {
-
-        touchView.setOnTouchListener(
-                new View.OnTouchListener() {
-
-                    @Override
-                    public boolean onTouch(
-                            View v,
-                            MotionEvent event) {
-
-                        switch (event.getActionMasked()) {
-
-                            case MotionEvent.ACTION_DOWN:
-
-                                downX = event.getX();
-                                downY = event.getY();
-
-                                initialDistance = 0;
-
-                                showControls();
-
-                                return true;
-
-                            case MotionEvent.ACTION_POINTER_DOWN:
-
-                                if (event.getPointerCount() >= 2) {
-
-                                    initialDistance =
-                                            getDistance(event);
-                                }
-
-                                return true;
-
-                            case MotionEvent.ACTION_MOVE:
-
-                                if (event.getPointerCount() >= 2) {
-
-                                    float newDistance =
-                                            getDistance(event);
-
-                                    if (initialDistance > 0) {
-
-                                        float scale =
-                                                newDistance /
-                                                        initialDistance;
-
-                                        zoomFactor =
-                                                zoomFactor * scale;
-
-                                        if (zoomFactor < 1.0f) {
-                                            zoomFactor = 1.0f;
-                                        }
-
-                                        if (zoomFactor > 3.0f) {
-                                            zoomFactor = 3.0f;
-                                        }
-
-                                        applyZoom();
-
-                                        initialDistance =
-                                                newDistance;
-                                    }
-
-                                    return true;
-                                }
-
-                                return true;
-
-                            case MotionEvent.ACTION_UP:
-
-                                showControls();
-
-                                return true;
-                        }
-
-                        return true;
-                    }
-                }
-        );
-    }
-
-    // ====================================================
-    // ZOOM
-    // ====================================================
-
-    private float getDistance(MotionEvent event) {
-
-        if (event.getPointerCount() < 2) {
-            return 0;
-        }
-
-        float x =
-                event.getX(0) -
-                        event.getX(1);
-
-        float y =
-                event.getY(0) -
-                        event.getY(1);
-
-        return (float) Math.sqrt(
-                x * x + y * y
-        );
-    }
-
-    private void applyZoom() {
-
-        if (videoWidth <= 0 ||
-                videoHeight <= 0) {
-            return;
-        }
-
-        int screenWidth =
-                rootLayout.getWidth();
-
-        int screenHeight =
-                rootLayout.getHeight();
-
-        if (screenWidth <= 0 ||
-                screenHeight <= 0) {
-            return;
-        }
-
-        float videoRatio =
-                (float) videoWidth /
-                        (float) videoHeight;
-
-        float screenRatio =
-                (float) screenWidth /
-                        (float) screenHeight;
-
-        int width;
-        int height;
-
-        if (videoRatio > screenRatio) {
-
-            width = screenWidth;
-
-            height =
-                    (int) (screenWidth /
-                            videoRatio);
-
-        } else {
-
-            height = screenHeight;
-
-            width =
-                    (int) (screenHeight *
-                            videoRatio);
-        }
-
-        width =
-                (int) (width * zoomFactor);
-
-        height =
-                (int) (height * zoomFactor);
-
-        FrameLayout.LayoutParams params =
-                new FrameLayout.LayoutParams(
-                        width,
-                        height
-                );
-
-        params.gravity = Gravity.CENTER;
-
-        surfaceView.setLayoutParams(params);
-    }
-
-    // ====================================================
-    // SURFACE
-    // ====================================================
+    // ================================================================
+    // SURFACE CALLBACKS
+    // ================================================================
 
     @Override
-    public void surfaceCreated(
-            SurfaceHolder holder) {
+    public void surfaceCreated(SurfaceHolder holder) {
 
         surfaceReady = true;
 
@@ -580,15 +460,17 @@ public class VideoPlayerActivity extends Activity
     }
 
     @Override
-    public void surfaceDestroyed(
-            SurfaceHolder holder) {
+    public void surfaceDestroyed(SurfaceHolder holder) {
 
         surfaceReady = false;
+        playerPrepared = false;
+
+        releasePlayer();
     }
 
-    // ====================================================
-    // PLAYER
-    // ====================================================
+    // ================================================================
+    // PREPARE PLAYER
+    // ================================================================
 
     private void preparePlayer() {
 
@@ -596,19 +478,23 @@ public class VideoPlayerActivity extends Activity
             return;
         }
 
+        releasePlayer();
+
         try {
 
-            releasePlayer();
-
             mediaPlayer = new MediaPlayer();
+
+            playerPrepared = false;
 
             mediaPlayer.setAudioStreamType(
                     AudioManager.STREAM_MUSIC
             );
 
+            Uri videoUri = Uri.parse(videoUriString);
+
             mediaPlayer.setDataSource(
                     this,
-                    Uri.parse(videoUriString)
+                    videoUri
             );
 
             mediaPlayer.setDisplay(surfaceHolder);
@@ -620,6 +506,8 @@ public class VideoPlayerActivity extends Activity
                         public void onPrepared(
                                 MediaPlayer mp) {
 
+                            playerPrepared = true;
+
                             try {
 
                                 videoWidth =
@@ -628,22 +516,23 @@ public class VideoPlayerActivity extends Activity
                                 videoHeight =
                                         mp.getVideoHeight();
 
-                                progressBar.setMax(
-                                        mp.getDuration()
-                                );
+                                int duration =
+                                        mp.getDuration();
+
+                                progressBar.setMax(duration);
+
+                                progressBar.setProgress(0);
 
                                 showTime(
                                         0,
-                                        mp.getDuration()
+                                        duration
                                 );
 
                                 applyZoom();
 
                                 mp.start();
 
-                                playPauseButton.setText(
-                                        "❚❚"
-                                );
+                                playPauseButton.setText("❚❚");
 
                                 showControls();
 
@@ -662,11 +551,14 @@ public class VideoPlayerActivity extends Activity
 
                             try {
 
-                                playPauseButton.setText(
-                                        "▶"
-                                );
+                                playPauseButton.setText("▶");
 
                                 progressBar.setProgress(
+                                        progressBar.getMax()
+                                );
+
+                                showTime(
+                                        progressBar.getMax(),
                                         progressBar.getMax()
                                 );
 
@@ -687,6 +579,8 @@ public class VideoPlayerActivity extends Activity
                                 int what,
                                 int extra) {
 
+                            playerPrepared = false;
+
                             statusText.setText(
                                     "Video playback error"
                             );
@@ -704,8 +598,10 @@ public class VideoPlayerActivity extends Activity
 
         } catch (Exception e) {
 
+            playerPrepared = false;
+
             statusText.setText(
-                    "Video could not be played"
+                    "Unable to play video"
             );
 
             statusText.setVisibility(
@@ -714,39 +610,24 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ====================================================
+    // ================================================================
     // CONTROLS
-    // ====================================================
+    // ================================================================
 
     private void showControls() {
-
-        if (playPauseButton == null) {
-            return;
-        }
 
         controlsVisible = true;
 
         playPauseButton.bringToFront();
-
         currentTimeText.bringToFront();
         totalTimeText.bringToFront();
         progressBar.bringToFront();
 
-        playPauseButton.setVisibility(
-                View.VISIBLE
-        );
+        playPauseButton.setVisibility(View.VISIBLE);
 
-        currentTimeText.setVisibility(
-                View.VISIBLE
-        );
-
-        totalTimeText.setVisibility(
-                View.VISIBLE
-        );
-
-        progressBar.setVisibility(
-                View.VISIBLE
-        );
+        currentTimeText.setVisibility(View.VISIBLE);
+        totalTimeText.setVisibility(View.VISIBLE);
+        progressBar.setVisibility(View.VISIBLE);
 
         handler.removeCallbacks(
                 hideControlsRunnable
@@ -762,56 +643,31 @@ public class VideoPlayerActivity extends Activity
 
         controlsVisible = false;
 
-        if (playPauseButton != null) {
+        // केवल Play/Pause button छुपेगा।
+        // Timeline और time हमेशा दिखाई देंगे।
 
-            playPauseButton.setVisibility(
-                    View.GONE
-            );
-        }
+        playPauseButton.setVisibility(View.GONE);
 
-        // टाइमलाइन और समय हमेशा वैसे ही रहेंगे
-        // जैसा अभी है।
-
-        if (currentTimeText != null) {
-            currentTimeText.setVisibility(
-                    View.VISIBLE
-            );
-        }
-
-        if (totalTimeText != null) {
-            totalTimeText.setVisibility(
-                    View.VISIBLE
-            );
-        }
-
-        if (progressBar != null) {
-            progressBar.setVisibility(
-                    View.VISIBLE
-            );
-        }
+        currentTimeText.setVisibility(View.VISIBLE);
+        totalTimeText.setVisibility(View.VISIBLE);
+        progressBar.setVisibility(View.VISIBLE);
     }
 
-    // ====================================================
-    // TIME
-    // ====================================================
+    // ================================================================
+    // TIME DISPLAY
+    // ================================================================
 
     private void showTime(
             int current,
-            int duration) {
+            int total) {
 
-        if (currentTimeText != null) {
+        currentTimeText.setText(
+                formatTime(current)
+        );
 
-            currentTimeText.setText(
-                    formatTime(current)
-            );
-        }
-
-        if (totalTimeText != null) {
-
-            totalTimeText.setText(
-                    formatTime(duration)
-            );
-        }
+        totalTimeText.setText(
+                formatTime(total)
+        );
     }
 
     private String formatTime(int milliseconds) {
@@ -819,14 +675,14 @@ public class VideoPlayerActivity extends Activity
         int totalSeconds =
                 milliseconds / 1000;
 
-        int seconds =
-                totalSeconds % 60;
-
-        int minutes =
-                (totalSeconds / 60) % 60;
-
         int hours =
                 totalSeconds / 3600;
+
+        int minutes =
+                (totalSeconds % 3600) / 60;
+
+        int seconds =
+                totalSeconds % 60;
 
         if (hours > 0) {
 
@@ -847,11 +703,103 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ====================================================
-    // RELEASE
-    // ====================================================
+    // ================================================================
+    // ZOOM
+    // ================================================================
+
+    private float distanceBetweenFingers(
+            MotionEvent event) {
+
+        if (event.getPointerCount() < 2) {
+            return 0;
+        }
+
+        float x =
+                event.getX(0) -
+                event.getX(1);
+
+        float y =
+                event.getY(0) -
+                event.getY(1);
+
+        return (float) Math.sqrt(
+                x * x + y * y
+        );
+    }
+
+    private void applyZoom() {
+
+        if (surfaceView == null ||
+                videoWidth <= 0 ||
+                videoHeight <= 0) {
+
+            return;
+        }
+
+        int screenWidth =
+                rootLayout.getWidth();
+
+        int screenHeight =
+                rootLayout.getHeight();
+
+        if (screenWidth <= 0 ||
+                screenHeight <= 0) {
+
+            return;
+        }
+
+        float videoRatio =
+                (float) videoWidth /
+                (float) videoHeight;
+
+        float screenRatio =
+                (float) screenWidth /
+                (float) screenHeight;
+
+        int baseWidth;
+        int baseHeight;
+
+        if (videoRatio > screenRatio) {
+
+            baseWidth = screenWidth;
+
+            baseHeight =
+                    (int) (screenWidth /
+                            videoRatio);
+
+        } else {
+
+            baseHeight = screenHeight;
+
+            baseWidth =
+                    (int) (screenHeight *
+                            videoRatio);
+        }
+
+        int newWidth =
+                (int) (baseWidth * zoomFactor);
+
+        int newHeight =
+                (int) (baseHeight * zoomFactor);
+
+        FrameLayout.LayoutParams params =
+                new FrameLayout.LayoutParams(
+                        newWidth,
+                        newHeight
+                );
+
+        params.gravity = Gravity.CENTER;
+
+        surfaceView.setLayoutParams(params);
+    }
+
+    // ================================================================
+    // RELEASE PLAYER
+    // ================================================================
 
     private void releasePlayer() {
+
+        playerPrepared = false;
 
         if (mediaPlayer != null) {
 
@@ -874,31 +822,35 @@ public class VideoPlayerActivity extends Activity
         }
     }
 
-    // ====================================================
-    // LIFECYCLE
-    // ====================================================
+    // ================================================================
+    // PAUSE
+    // ================================================================
 
     @Override
     protected void onPause() {
 
         super.onPause();
 
-        if (mediaPlayer != null) {
+        if (mediaPlayer != null &&
+                playerPrepared) {
 
             try {
 
                 if (mediaPlayer.isPlaying()) {
+
                     mediaPlayer.pause();
 
-                    if (playPauseButton != null) {
-                        playPauseButton.setText("▶");
-                    }
+                    playPauseButton.setText("▶");
                 }
 
             } catch (Exception ignored) {
             }
         }
     }
+
+    // ================================================================
+    // DESTROY
+    // ================================================================
 
     @Override
     protected void onDestroy() {
