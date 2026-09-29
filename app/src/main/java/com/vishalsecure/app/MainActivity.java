@@ -28,11 +28,19 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import java.text.SimpleDateFormat;
+
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Locale;
+import java.util.UUID;
 
 
 public class MainActivity extends Activity {
@@ -101,13 +109,14 @@ public class MainActivity extends Activity {
                 );
 
 
-        loadReceiverDetails();
-
         loadExpiry();
 
         loadVideos();
 
         buildMainScreen();
+
+        // Old videos, if any, are migrated to private storage.
+        migrateOldVideosToPrivateStorage();
     }
 
 
@@ -508,7 +517,6 @@ public class MainActivity extends Activity {
         );
 
 
-        // Show saved receiver information
         loadReceiverIntoFields();
 
         updateExpiryText();
@@ -591,17 +599,6 @@ public class MainActivity extends Activity {
                 )
 
                 .show();
-    }
-
-
-    // =========================================================
-    // LOAD RECEIVER DETAILS
-    // =========================================================
-
-    private void loadReceiverDetails() {
-
-        // Values are loaded later into EditText fields
-        // after the main screen has been created.
     }
 
 
@@ -1017,24 +1014,30 @@ public class MainActivity extends Activity {
         }
 
 
-        try {
+        // -----------------------------------------------------
+        // COPY SELECTED VIDEO INTO PRIVATE APP STORAGE
+        // -----------------------------------------------------
 
-            getContentResolver()
-                    .takePersistableUriPermission(
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    );
+        String privatePath =
+                copyVideoToPrivateStorage(uri);
 
-        } catch (Exception ignored) {
+
+        if (privatePath == null) {
+
+            showVideoError(
+                    "Video को secure storage में save नहीं किया जा सका।"
+            );
+
+            return;
         }
 
 
-        String uriString =
-                uri.toString();
-
+        // -----------------------------------------------------
+        // DUPLICATE CHECK
+        // -----------------------------------------------------
 
         if (videoUris.contains(
-                uriString
+                privatePath
         )) {
 
             return;
@@ -1042,13 +1045,14 @@ public class MainActivity extends Activity {
 
 
         videoUris.add(
-                uriString
+                privatePath
         );
 
 
-        // First use the original file name.
-        // It can be changed immediately through
-        // the custom-name dialog.
+        // -----------------------------------------------------
+        // ORIGINAL DISPLAY NAME
+        // -----------------------------------------------------
+
         String originalName =
                 getVideoName(uri);
 
@@ -1061,10 +1065,268 @@ public class MainActivity extends Activity {
         saveVideos();
 
 
-        // Ask user for custom display name
+        // -----------------------------------------------------
+        // CUSTOM NAME
+        // -----------------------------------------------------
+
         showVideoNameDialog(
                 videoUris.size() - 1,
                 originalName
+        );
+    }
+
+
+    // =========================================================
+    // COPY VIDEO TO PRIVATE STORAGE
+    // =========================================================
+
+    private String copyVideoToPrivateStorage(
+            Uri sourceUri
+    ) {
+
+        InputStream inputStream = null;
+        OutputStream outputStream = null;
+
+        try {
+
+            File secureDirectory =
+                    new File(
+                            getFilesDir(),
+                            "secure_videos"
+                    );
+
+
+            if (!secureDirectory.exists()) {
+
+                if (!secureDirectory.mkdirs()) {
+
+                    return null;
+                }
+            }
+
+
+            String extension =
+                    getFileExtension(
+                            getVideoName(sourceUri)
+                    );
+
+
+            if (
+                    extension == null
+                            ||
+                    extension.isEmpty()
+            ) {
+
+                extension = ".mp4";
+            }
+
+
+            File destinationFile =
+                    new File(
+                            secureDirectory,
+                            UUID.randomUUID().toString()
+                                    +
+                            extension
+                    );
+
+
+            inputStream =
+                    getContentResolver()
+                            .openInputStream(
+                                    sourceUri
+                            );
+
+
+            if (inputStream == null) {
+
+                return null;
+            }
+
+
+            outputStream =
+                    new FileOutputStream(
+                            destinationFile
+                    );
+
+
+            byte[] buffer =
+                    new byte[1024 * 1024];
+
+
+            int length;
+
+
+            while (
+                    (length =
+                            inputStream.read(buffer))
+                            != -1
+            ) {
+
+                outputStream.write(
+                        buffer,
+                        0,
+                        length
+                );
+            }
+
+
+            outputStream.flush();
+
+
+            return destinationFile
+                    .getAbsolutePath();
+
+
+        } catch (Exception e) {
+
+            return null;
+
+        } finally {
+
+            if (inputStream != null) {
+
+                try {
+                    inputStream.close();
+                } catch (Exception ignored) {
+                }
+            }
+
+
+            if (outputStream != null) {
+
+                try {
+                    outputStream.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+
+    // =========================================================
+    // GET FILE EXTENSION
+    // =========================================================
+
+    private String getFileExtension(
+            String name
+    ) {
+
+        if (name == null) {
+            return ".mp4";
+        }
+
+
+        int dot =
+                name.lastIndexOf(".");
+
+
+        if (
+                dot >= 0
+                        &&
+                dot < name.length() - 1
+        ) {
+
+            return name.substring(
+                    dot
+            );
+        }
+
+
+        return ".mp4";
+    }
+
+
+    // =========================================================
+    // MIGRATE OLD VIDEOS
+    // =========================================================
+
+    private void migrateOldVideosToPrivateStorage() {
+
+        boolean changed = false;
+
+
+        for (
+                int i = 0;
+                i < videoUris.size();
+                i++
+        ) {
+
+            String current =
+                    videoUris.get(i);
+
+
+            if (current == null ||
+                    current.trim().isEmpty()) {
+
+                continue;
+            }
+
+
+            // Already a private file
+            if (isPrivateVideoPath(current)) {
+
+                continue;
+            }
+
+
+            try {
+
+                Uri oldUri =
+                        Uri.parse(current);
+
+
+                String privatePath =
+                        copyVideoToPrivateStorage(
+                                oldUri
+                        );
+
+
+                if (privatePath != null) {
+
+                    videoUris.set(
+                            i,
+                            privatePath
+                    );
+
+                    changed = true;
+                }
+
+            } catch (Exception ignored) {
+            }
+        }
+
+
+        if (changed) {
+
+            saveVideos();
+
+            refreshVideoList();
+        }
+    }
+
+
+    // =========================================================
+    // CHECK PRIVATE VIDEO PATH
+    // =========================================================
+
+    private boolean isPrivateVideoPath(
+            String path
+    ) {
+
+        if (path == null) {
+            return false;
+        }
+
+
+        String privateDirectory =
+                new File(
+                        getFilesDir(),
+                        "secure_videos"
+                ).getAbsolutePath();
+
+
+        return path.startsWith(
+                privateDirectory
         );
     }
 
@@ -1327,6 +1589,7 @@ public class MainActivity extends Activity {
     private void loadVideos() {
 
         videoUris.clear();
+
         videoNames.clear();
 
 
@@ -1360,6 +1623,7 @@ public class MainActivity extends Activity {
             if (uri != null) {
 
                 videoUris.add(uri);
+
                 videoNames.add(name);
             }
         }
@@ -1492,20 +1756,34 @@ public class MainActivity extends Activity {
                         }
 
 
-                        String uriString =
+                        String path =
                                 videoUris.get(
                                         position
                                 );
 
 
                         if (
-                                uriString == null
+                                path == null
                                         ||
-                                uriString.trim().isEmpty()
+                                path.trim().isEmpty()
                         ) {
 
                             showVideoError(
                                     "Video file नहीं मिली।"
+                            );
+
+                            return;
+                        }
+
+
+                        File videoFile =
+                                new File(path);
+
+
+                        if (!videoFile.exists()) {
+
+                            showVideoError(
+                                    "Secure video file नहीं मिली।"
                             );
 
                             return;
@@ -1519,9 +1797,19 @@ public class MainActivity extends Activity {
                                 );
 
 
+                        /*
+                         * VideoPlayerActivity already accepts
+                         * the video_uri string.
+                         *
+                         * Here we send the private file path
+                         * using file:// URI.
+                         */
+
                         intent.putExtra(
                                 "video_uri",
-                                uriString
+                                Uri.fromFile(
+                                        videoFile
+                                ).toString()
                         );
 
 
@@ -1640,6 +1928,32 @@ public class MainActivity extends Activity {
         ) {
 
             return;
+        }
+
+
+        String path =
+                videoUris.get(
+                        position
+                );
+
+
+        // Delete private secure copy
+        if (path != null) {
+
+            try {
+
+                File file =
+                        new File(path);
+
+
+                if (file.exists() &&
+                        isPrivateVideoPath(path)) {
+
+                    file.delete();
+                }
+
+            } catch (Exception ignored) {
+            }
         }
 
 
