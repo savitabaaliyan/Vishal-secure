@@ -1,14 +1,13 @@
 package com.vishalsecure.app;
 
-import android.content.Context;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.security.KeyStore;
-import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -17,14 +16,21 @@ import javax.crypto.spec.GCMParameterSpec;
 
 public class CryptoManager {
 
-    private static final String KEYSTORE_NAME = "AndroidKeyStore";
-    private static final String KEY_ALIAS = "VishalSecureVideoKey";
+    private static final String TAG = "VishalSecure";
+
+    private static final String KEYSTORE_NAME =
+            "AndroidKeyStore";
+
+    private static final String KEY_ALIAS =
+            "VishalSecureVideoKey";
 
     private static final String TRANSFORMATION =
             "AES/GCM/NoPadding";
 
     private static final int IV_LENGTH = 12;
-    private static final int BUFFER_SIZE = 1024 * 1024;
+
+    private static final int BUFFER_SIZE =
+            1024 * 1024;
 
     private CryptoManager() {
     }
@@ -45,8 +51,17 @@ public class CryptoManager {
                             null
                     );
 
-            return ((KeyStore.SecretKeyEntry) entry)
-                    .getSecretKey();
+            if (entry instanceof KeyStore.SecretKeyEntry) {
+
+                return ((KeyStore.SecretKeyEntry) entry)
+                        .getSecretKey();
+            }
+
+            /*
+             * अगर पुराना alias सही SecretKey नहीं है,
+             * तो उसे हटाकर नया AES key बनाया जाएगा।
+             */
+            keyStore.deleteEntry(KEY_ALIAS);
         }
 
         KeyGenerator keyGenerator =
@@ -82,7 +97,13 @@ public class CryptoManager {
 
         if (inputFile == null ||
                 outputFile == null ||
-                !inputFile.exists()) {
+                !inputFile.exists() ||
+                !inputFile.isFile()) {
+
+            Log.e(
+                    TAG,
+                    "Encryption failed: input file missing"
+            );
 
             return false;
         }
@@ -92,30 +113,38 @@ public class CryptoManager {
             SecretKey key =
                     getOrCreateKey();
 
-            byte[] iv =
-                    new byte[IV_LENGTH];
-
-            SecureRandom random =
-                    new SecureRandom();
-
-            random.nextBytes(iv);
-
             Cipher cipher =
                     Cipher.getInstance(
                             TRANSFORMATION
                     );
 
-            GCMParameterSpec gcmSpec =
-                    new GCMParameterSpec(
-                            128,
-                            iv
-                    );
-
+            /*
+             * IMPORTANT:
+             *
+             * Android Keystore को खुद secure random IV
+             * generate करने दिया जा रहा है।
+             *
+             * इससे कुछ devices पर होने वाली
+             * GCM IV initialization समस्या से बचेंगे।
+             */
             cipher.init(
                     Cipher.ENCRYPT_MODE,
-                    key,
-                    gcmSpec
+                    key
             );
+
+            byte[] iv =
+                    cipher.getIV();
+
+            if (iv == null ||
+                    iv.length != IV_LENGTH) {
+
+                Log.e(
+                        TAG,
+                        "Encryption failed: invalid IV"
+                );
+
+                return false;
+            }
 
             File parent =
                     outputFile.getParentFile();
@@ -123,7 +152,20 @@ public class CryptoManager {
             if (parent != null &&
                     !parent.exists()) {
 
-                parent.mkdirs();
+                if (!parent.mkdirs() &&
+                        !parent.exists()) {
+
+                    Log.e(
+                            TAG,
+                            "Encryption failed: cannot create directory"
+                    );
+
+                    return false;
+                }
+            }
+
+            if (outputFile.exists()) {
+                outputFile.delete();
             }
 
             try (
@@ -139,8 +181,7 @@ public class CryptoManager {
             ) {
 
                 /*
-                 * पहले IV save होगा।
-                 * बाकी पूरा data encrypted होगा।
+                 * File की शुरुआत में 12-byte IV रहेगा।
                  */
                 output.write(iv);
 
@@ -161,7 +202,8 @@ public class CryptoManager {
                                     read
                             );
 
-                    if (encrypted != null) {
+                    if (encrypted != null &&
+                            encrypted.length > 0) {
 
                         output.write(
                                 encrypted
@@ -169,10 +211,15 @@ public class CryptoManager {
                     }
                 }
 
+                /*
+                 * GCM authentication tag भी
+                 * doFinal() में सुरक्षित रूप से जुड़ता है।
+                 */
                 byte[] finalBytes =
                         cipher.doFinal();
 
-                if (finalBytes != null) {
+                if (finalBytes != null &&
+                        finalBytes.length > 0) {
 
                     output.write(
                             finalBytes
@@ -182,9 +229,36 @@ public class CryptoManager {
                 output.flush();
             }
 
+            if (!outputFile.exists() ||
+                    outputFile.length() <= IV_LENGTH) {
+
+                Log.e(
+                        TAG,
+                        "Encryption failed: output file invalid"
+                );
+
+                if (outputFile.exists()) {
+                    outputFile.delete();
+                }
+
+                return false;
+            }
+
+            Log.d(
+                    TAG,
+                    "Encryption successful: "
+                            + outputFile.getAbsolutePath()
+            );
+
             return true;
 
         } catch (Exception e) {
+
+            Log.e(
+                    TAG,
+                    "Encryption failed",
+                    e
+            );
 
             if (outputFile.exists()) {
                 outputFile.delete();
@@ -201,7 +275,13 @@ public class CryptoManager {
 
         if (encryptedFile == null ||
                 outputFile == null ||
-                !encryptedFile.exists()) {
+                !encryptedFile.exists() ||
+                !encryptedFile.isFile()) {
+
+            Log.e(
+                    TAG,
+                    "Decryption failed: encrypted file missing"
+            );
 
             return false;
         }
@@ -225,6 +305,12 @@ public class CryptoManager {
                         input.read(iv);
 
                 if (ivRead != IV_LENGTH) {
+
+                    Log.e(
+                            TAG,
+                            "Decryption failed: invalid IV"
+                    );
+
                     return false;
                 }
 
@@ -251,7 +337,20 @@ public class CryptoManager {
                 if (parent != null &&
                         !parent.exists()) {
 
-                    parent.mkdirs();
+                    if (!parent.mkdirs() &&
+                            !parent.exists()) {
+
+                        Log.e(
+                                TAG,
+                                "Decryption failed: cannot create directory"
+                        );
+
+                        return false;
+                    }
+                }
+
+                if (outputFile.exists()) {
+                    outputFile.delete();
                 }
 
                 try (
@@ -278,7 +377,8 @@ public class CryptoManager {
                                         read
                                 );
 
-                        if (decrypted != null) {
+                        if (decrypted != null &&
+                                decrypted.length > 0) {
 
                             output.write(
                                     decrypted
@@ -286,10 +386,14 @@ public class CryptoManager {
                         }
                     }
 
+                    /*
+                     * GCM authentication check यहाँ होगा।
+                     */
                     byte[] finalBytes =
                             cipher.doFinal();
 
-                    if (finalBytes != null) {
+                    if (finalBytes != null &&
+                            finalBytes.length > 0) {
 
                         output.write(
                                 finalBytes
@@ -300,9 +404,30 @@ public class CryptoManager {
                 }
             }
 
+            if (!outputFile.exists()) {
+
+                Log.e(
+                        TAG,
+                        "Decryption failed: output missing"
+                );
+
+                return false;
+            }
+
+            Log.d(
+                    TAG,
+                    "Decryption successful"
+            );
+
             return true;
 
         } catch (Exception e) {
+
+            Log.e(
+                    TAG,
+                    "Decryption failed",
+                    e
+            );
 
             if (outputFile.exists()) {
                 outputFile.delete();
