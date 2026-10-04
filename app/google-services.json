@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "497745859630",
+    "project_id": "vishal-eb984",
+    "storage_bucket": "vishal-eb984.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:497745859630:android:c7422b3748aaf5afe47bbf",
+        "android_client_info": {
+          "package_name": "com.vishalsecure.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCcVMsODjX_acrrjWSHDuR7Iw3p2KawnY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
