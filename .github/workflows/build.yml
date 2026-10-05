@@ -28,7 +28,7 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug
 
-      -       - name: Show SHA-1 and SHA-256
+      - name: Show SHA-1 and SHA-256
         run: |
           echo "===== Vishal Secure APK Certificate ====="
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
