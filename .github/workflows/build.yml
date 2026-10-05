@@ -1,41 +1,7 @@
-name: Build Android APK
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-
-      - name: Build APK
-        run: gradle assembleDebug
-
       - name: Show SHA-1 and SHA-256
         run: |
           echo "===== Vishal Secure APK Certificate ====="
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Vishal-Secure-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name "apksigner" | sort -V | tail -n 1)
+          echo "Using: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
