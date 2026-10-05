@@ -28,10 +28,10 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug
 
-      - - name: Show SHA-1 and SHA-256
-  run: |
-    echo "===== Vishal Secure APK Certificate ====="
-    keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk
+      - name: Show SHA-1 and SHA-256
+        run: |
+          echo "===== Vishal Secure APK Certificate ====="
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
