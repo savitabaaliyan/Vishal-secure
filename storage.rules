@@ -1,0 +1,33 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /videos/{assignmentId}/payload.vsec {
+      function assignment() {
+        return firestore.get(/databases/(default)/documents/videoAssignments/$(assignmentId)).data;
+      }
+
+      allow create: if request.auth != null
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 500 * 1024 * 1024
+        && request.resource.contentType == 'application/octet-stream'
+        && assignment().senderUid == request.auth.uid
+        && assignment().status == 'pending_upload'
+        && assignment().expiresAt > request.time
+        && resource == null;
+
+      allow get: if request.auth != null
+        && resource != null
+        && assignment().recipientUid == request.auth.uid
+        && assignment().status == 'active'
+        && assignment().expiresAt > request.time;
+
+      allow list: if false;
+      allow update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

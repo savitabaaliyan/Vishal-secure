@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /videoAssignments/{assignmentId} {
+      allow get: if request.auth != null
+        && (request.auth.uid == resource.data.senderUid
+          || request.auth.uid == resource.data.recipientUid);
+      allow list: if request.auth != null
+        && (request.auth.uid == resource.data.senderUid
+          || request.auth.uid == resource.data.recipientUid);
+      // Only trusted Cloud Functions may create or change assignments.
+      allow create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
