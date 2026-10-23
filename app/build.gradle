@@ -3,9 +3,34 @@ plugins {
     id 'com.google.gms.google-services'
 }
 
+def stableStorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+def stableStorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+def stableKeyAlias = System.getenv('ANDROID_KEY_ALIAS')
+def stableKeyPassword = System.getenv('ANDROID_KEY_PASSWORD')
+def hasStableSigning = [stableStorePath, stableStorePassword, stableKeyAlias, stableKeyPassword].every { it != null && !it.trim().isEmpty() }
+
 android {
     namespace 'com.vishalsecure.app'
     compileSdk 35
+
+    signingConfigs {
+        stableDebug {
+            if (hasStableSigning) {
+                storeFile file(stableStorePath)
+                storePassword stableStorePassword
+                keyAlias stableKeyAlias
+                keyPassword stableKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (hasStableSigning) {
+                signingConfig signingConfigs.stableDebug
+            }
+        }
+    }
 
     defaultConfig {
         applicationId 'com.vishalsecure.app'
