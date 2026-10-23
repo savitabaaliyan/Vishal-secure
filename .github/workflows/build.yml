@@ -26,8 +26,30 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Prepare stable APK signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::Missing ANDROID_KEYSTORE_BASE64 repository secret. Configure all four signing secrets before building an installable APK."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/vishal-secure-upload.jks"
+          test -s "$RUNNER_TEMP/vishal-secure-upload.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/vishal-secure-upload.jks" >> "$GITHUB_ENV"
+
       - name: Build APK
-        run: gradle assembleDebug
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/vishal-secure-upload.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Missing one or more Android signing secrets."
+            exit 1
+          fi
+          gradle assembleDebug
 
       - name: Show SHA-1 and SHA-256
         run: |
