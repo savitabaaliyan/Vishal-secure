@@ -166,3 +166,62 @@ exports.finalizeVideoUpload = onCall(async (request) => {
 
   return result;
 });
+
+/**
+ * First-call device binding for an authenticated, verified account.
+ * The client sends only a SHA-256 device fingerprint, never the raw Android ID.
+ * This is a basic binding control; Play Integrity/App Check and recovery policy
+ * must be configured before treating it as high-assurance device attestation.
+ */
+exports.bindDevice = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in before binding this device.');
+  }
+
+  const deviceIdHash = cleanText(request.data && request.data.deviceIdHash, 64).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(deviceIdHash)) {
+    throw new HttpsError('invalid-argument', 'A valid SHA-256 device fingerprint is required.');
+  }
+
+  const user = await getAuth().getUser(request.auth.uid);
+  const providers = new Set((user.providerData || []).map((p) => p.providerId));
+  if (!user.email || !user.emailVerified || !providers.has('password')
+      || !user.phoneNumber || !providers.has('phone')) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Verify your email and link your verified mobile number before binding this device.'
+    );
+  }
+
+  const bindingRef = db.collection('deviceBindings').doc(request.auth.uid);
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(bindingRef);
+    if (!snap.exists) {
+      tx.create(bindingRef, {
+        uid: request.auth.uid,
+        deviceIdHash,
+        platform: 'android',
+        createdAt: FieldValue.serverTimestamp(),
+        lastSeenAt: FieldValue.serverTimestamp(),
+        bindingVersion: 1
+      });
+      return { bound: true, firstBinding: true };
+    }
+
+    const existing = snap.data();
+    if (existing.deviceIdHash !== deviceIdHash) {
+      throw new HttpsError(
+        'permission-denied',
+        'This account is already bound to another device. Contact the app administrator for a verified recovery.'
+      );
+    }
+
+    tx.update(bindingRef, {
+      lastSeenAt: FieldValue.serverTimestamp()
+    });
+    return { bound: true, firstBinding: false };
+  });
+
+  return result;
+});
+
