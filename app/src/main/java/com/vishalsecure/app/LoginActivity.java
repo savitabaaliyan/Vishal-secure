@@ -197,29 +197,33 @@ public class LoginActivity extends Activity {
             return;
         }
 
-        PhoneAuthOptions options = PhoneAuthOptions.newBuilder(auth)
-                .setPhoneNumber(number)
-                .setTimeout(60L, TimeUnit.SECONDS)
-                .setActivity(this)
-                .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                    @Override
-                    public void onVerificationCompleted(PhoneAuthCredential credential) {
-                        linkPhone(credential);
-                    }
-
-                    @Override
-                    public void onVerificationFailed(FirebaseException e) {
-                        toast("OTP failed: " + errorMessage(e));
-                    }
-
-                    @Override
-                    public void onCodeSent(String id, PhoneAuthProvider.ForceResendingToken token) {
-                        verificationId = id;
-                        toast("OTP sent. Enter the code received on your mobile.");
-                    }
-                })
-                .build();
-        PhoneAuthProvider.verifyPhoneNumber(options);
+        try {
+            PhoneAuthOptions options = PhoneAuthOptions.newBuilder(auth)
+                    .setPhoneNumber(number)
+                    .setTimeout(60L, TimeUnit.SECONDS)
+                    .setActivity(this)
+                    .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                        @Override
+                        public void onVerificationCompleted(PhoneAuthCredential credential) {
+                            linkPhone(credential);
+                        }
+    
+                        @Override
+                        public void onVerificationFailed(FirebaseException e) {
+                            toast("OTP failed: " + errorMessage(e));
+                        }
+    
+                        @Override
+                        public void onCodeSent(String id, PhoneAuthProvider.ForceResendingToken token) {
+                            verificationId = id;
+                            toast("OTP sent. Enter the code received on your mobile.");
+                        }
+                    })
+                    .build();
+            PhoneAuthProvider.verifyPhoneNumber(options);
+        } catch (Exception e) {
+            toast("Could not start OTP verification: " + errorMessage(e));
+        }
     }
 
     private void verifyOtp() {
