@@ -148,7 +148,7 @@ public class MainActivity extends Activity {
         FirebaseUser user =
                 FirebaseAuth.getInstance().getCurrentUser();
 
-        if (user == null) {
+        if (user == null || !user.isEmailVerified()) {
             return false;
         }
 
