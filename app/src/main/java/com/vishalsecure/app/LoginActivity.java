@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.Log;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
@@ -205,18 +206,33 @@ public class LoginActivity extends Activity {
                     .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                         @Override
                         public void onVerificationCompleted(PhoneAuthCredential credential) {
-                            linkPhone(credential);
+                            Log.i("VishalSecureOTP", "Phone verification completed automatically.");
+                            try {
+                                linkPhone(credential);
+                            } catch (RuntimeException e) {
+                                Log.e("VishalSecureOTP", "Error while linking automatically verified phone.", e);
+                                toast("Phone verification completed, but linking failed. Please tap VERIFY OTP if a code was received.");
+                            }
                         }
-    
+
                         @Override
                         public void onVerificationFailed(FirebaseException e) {
+                            Log.e("VishalSecureOTP", "Firebase phone verification failed.", e);
                             toast("OTP failed: " + errorMessage(e));
                         }
-    
+
                         @Override
                         public void onCodeSent(String id, PhoneAuthProvider.ForceResendingToken token) {
+                            Log.i("VishalSecureOTP", "OTP code sent callback received.");
                             verificationId = id;
                             toast("OTP sent. Enter the code received on your mobile.");
+                        }
+
+                        @Override
+                        public void onCodeAutoRetrievalTimeOut(String id) {
+                            Log.w("VishalSecureOTP", "OTP auto-retrieval timed out.");
+                            verificationId = id;
+                            toast("OTP auto-detection timed out. If SMS arrived, enter the code manually.");
                         }
                     })
                     .build();
