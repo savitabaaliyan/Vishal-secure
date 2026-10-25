@@ -1,6 +1,7 @@
 package com.vishalsecure.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
@@ -19,6 +20,11 @@ import com.google.firebase.auth.PhoneAuthCredential;
 import com.google.firebase.auth.PhoneAuthOptions;
 import com.google.firebase.auth.PhoneAuthProvider;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 public class LoginActivity extends Activity {
@@ -30,6 +36,7 @@ public class LoginActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         auth = FirebaseAuth.getInstance();
+        installCrashReportHandler();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -92,6 +99,54 @@ public class LoginActivity extends Activity {
         root.addView(verify);
 
         setContentView(root);
+        showPreviousCrashReport();
+    }
+
+    private void installCrashReportHandler() {
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            try {
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                pw.println("Vishal Secure crash report");
+                pw.println("Thread: " + thread.getName());
+                throwable.printStackTrace(pw);
+                pw.flush();
+                File report = new File(getFilesDir(), "last_crash.txt");
+                try (FileOutputStream out = new FileOutputStream(report, false)) {
+                    out.write(sw.toString().getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                    out.getFD().sync();
+                }
+            } catch (Exception ignored) {
+                Log.e("VishalSecureCrash", "Could not save crash report.", ignored);
+            }
+            if (previous != null) {
+                previous.uncaughtException(thread, throwable);
+            } else {
+                android.os.Process.killProcess(android.os.Process.myPid());
+                System.exit(10);
+            }
+        });
+    }
+
+    private void showPreviousCrashReport() {
+        File report = new File(getFilesDir(), "last_crash.txt");
+        if (!report.isFile()) return;
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(report.toPath());
+            String details = new String(bytes, StandardCharsets.UTF_8);
+            new AlertDialog.Builder(this)
+                    .setTitle("Previous app crash report")
+                    .setMessage(details)
+                    .setPositiveButton("Close", (dialog, which) -> { })
+                    .setNeutralButton("Clear report", (dialog, which) -> {
+                        if (!report.delete()) Log.w("VishalSecureCrash", "Could not delete old crash report.");
+                    })
+                    .show();
+        } catch (Exception e) {
+            Log.e("VishalSecureCrash", "Could not read previous crash report.", e);
+        }
     }
 
     private String emailValue() {
