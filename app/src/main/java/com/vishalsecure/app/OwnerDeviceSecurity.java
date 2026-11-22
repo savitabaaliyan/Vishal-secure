@@ -158,6 +158,72 @@ public final class OwnerDeviceSecurity {
                 });
     }
 
+    /** Starts a replacement request; call from the old, currently active phone. */
+    public Task<HttpsCallableResult> beginReplacement(String newDeviceId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("newDeviceId", newDeviceId);
+        return functions.getHttpsCallable("beginOwnerDeviceReplacement").call(data);
+    }
+
+    /** Signs the server challenge on the old phone to approve its replacement. */
+    public Task<HttpsCallableResult> approveReplacement(String challengeId, String nonce, String purpose) throws Exception {
+        String message = challengeId + "." + nonce + "." + getCurrentUid()
+                + "." + getInstallationId() + "." + purpose;
+        Map<String, Object> data = new HashMap<>();
+        data.put("challengeId", challengeId);
+        data.put("signature", signMessage(message));
+        return functions.getHttpsCallable("approveOwnerDeviceReplacement").call(data);
+    }
+
+    /** Requests the one-use proof challenge for the new phone after old-phone approval. */
+    public Task<HttpsCallableResult> beginReplacementDeviceProof(String replacementId) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("replacementId", replacementId);
+        return functions.getHttpsCallable("beginOwnerReplacementDeviceProof").call(data);
+    }
+
+    /** Completes replacement on the new phone; server revokes the old phone atomically. */
+    public Task<HttpsCallableResult> completeReplacement(
+            String replacementId, String challengeId, String nonce, String purpose) throws Exception {
+        String deviceId = getInstallationId();
+        String message = challengeId + "." + nonce + "." + getCurrentUid()
+                + "." + deviceId + "." + purpose;
+        Map<String, Object> data = new HashMap<>();
+        data.put("replacementId", replacementId);
+        data.put("proofChallengeId", challengeId);
+        data.put("deviceId", deviceId);
+        data.put("publicKey", getPublicKeyPem());
+        data.put("signature", signMessage(message));
+        return functions.getHttpsCallable("completeOwnerDeviceReplacement").call(data);
+    }
+
+    /** Creates a one-time recovery code. Display/store it securely; never log it. */
+    public Task<HttpsCallableResult> createRecoveryCode() {
+        return functions.getHttpsCallable("createOwnerRecoveryCode").call(new HashMap<>());
+    }
+
+    /** Requests a new-phone challenge for recovery when the old phone is unavailable. */
+    public Task<HttpsCallableResult> beginRecoveryChallenge() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("deviceId", getInstallationId());
+        return functions.getHttpsCallable("beginOwnerDeviceRecovery").call(data);
+    }
+
+    /** Completes recovery using the one-time offline code and this phone's Keystore key. */
+    public Task<HttpsCallableResult> recoverOwnerDevice(
+            String recoveryCode, String challengeId, String nonce, String purpose) throws Exception {
+        String deviceId = getInstallationId();
+        String message = challengeId + "." + nonce + "." + getCurrentUid()
+                + "." + deviceId + "." + purpose;
+        Map<String, Object> data = new HashMap<>();
+        data.put("recoveryCode", recoveryCode);
+        data.put("deviceId", deviceId);
+        data.put("publicKey", getPublicKeyPem());
+        data.put("challengeId", challengeId);
+        data.put("signature", signMessage(message));
+        return functions.getHttpsCallable("recoverOwnerDevice").call(data);
+    }
+
     private String getCurrentUid() {
         com.google.firebase.auth.FirebaseUser user =
                 com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
