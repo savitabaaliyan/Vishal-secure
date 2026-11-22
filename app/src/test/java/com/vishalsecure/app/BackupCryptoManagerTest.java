@@ -76,7 +76,7 @@ public class BackupCryptoManagerTest {
         assertTrue(BackupCryptoManager.encryptFile(source, encrypted, "owner-uid", "video-123", secret));
 
         String tooLongUid = new String(new char[1025]).replace('\0', 'u');
-        String tooLongObjectId = new String(new char[1025]).replace('\\0', 'v');
+        String tooLongObjectId = new String(new char[1025]).replace('\0', 'v');
         assertFalse(BackupCryptoManager.decryptFile(encrypted, restored,
                 tooLongUid, "video-123", secret));
         assertFalse(restored.exists());
