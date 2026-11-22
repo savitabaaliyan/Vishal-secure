@@ -161,3 +161,15 @@ No secrets, passwords, OTP values, private keys, or recovery codes should be pla
 - Android has not yet been updated to request the challenge, canonicalize the payload, sign the server challenge using Android Keystore, and attach `deviceProof`. Therefore do not enroll a production account or deploy these changes until Android integration and tests are complete.
 - The Node syntax-check workflow is configured to run on changes to the Functions directory. Its result must be checked in GitHub Actions before treating syntax validation as passed.
 - Storage access, direct Storage URL access, other privileged endpoints, Android integration, App Check/Play Integrity, automated emulator tests, backup/key recovery, and physical-device tests remain open.
+
+
+### Android Keystore integration foundation — 2026-11-22
+
+- Added `OwnerDeviceSecurity.java` as an isolated Android helper.
+- It creates a random installation ID and a non-exportable P-256 signing key in Android Keystore; the private key is never exported.
+- It exposes callable-client methods for initial enrollment and for obtaining/signing a one-time challenge bound to an allowlisted sensitive request payload.
+- Added the Firebase Functions Android SDK dependency.
+- The sensitive-request challenge response now returns the payload hash required by the Android signer.
+- Extended the dedicated migration workflow to compile the Android debug APK in CI, without using release signing secrets.
+- This is an integration foundation, not a finished user-facing migration flow: no automatic enrollment is triggered, no replacement/recovery screens are wired, and existing local video encryption/storage code is unchanged.
+- Do not deploy the backend or enroll a real owner account until the CI build and backend syntax checks pass, the callable flow is reviewed end-to-end, and the Android UI/restore flow is completed.
