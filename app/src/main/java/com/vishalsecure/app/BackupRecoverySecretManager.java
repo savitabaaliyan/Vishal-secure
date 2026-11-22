@@ -162,8 +162,12 @@ public final class BackupRecoverySecretManager {
         return generator.generateKey();
     }
 
-    private static byte[] sha256(byte[] input) throws Exception {
-        return MessageDigest.getInstance("SHA-256").digest(input);
+    private static byte[] sha256(byte[] input) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(input);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable.", e);
+        }
     }
 
     private static String hex(byte[] input) {
