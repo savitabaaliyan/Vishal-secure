@@ -325,6 +325,11 @@ public class MainActivity extends Activity {
 
         root.addView(expiryButton);
 
+        Button ownerSecurityButton = new Button(this);
+        ownerSecurityButton.setText("OWNER DEVICE SECURITY");
+        ownerSecurityButton.setOnClickListener(v -> showOwnerDeviceEnrollmentPrompt());
+        root.addView(ownerSecurityButton);
+
         expiryText =
                 new TextView(this);
 
@@ -382,6 +387,60 @@ public class MainActivity extends Activity {
         );
 
         setContentView(root);
+    }
+
+
+    /** Explicit, user-confirmed first enrollment; never runs automatically. */
+    private void showOwnerDeviceEnrollmentPrompt() {
+        new AlertDialog.Builder(this)
+                .setTitle("Owner Device Security")
+                .setMessage("यह सुविधा आपके वर्तमान फोन को आपके Vishal Secure खाते का मुख्य डिवाइस बनाएगी। इसे तभी शुरू करें जब नया owner-device backend Firebase पर deploy हो चुका हो। यह प्रक्रिया पुराने वीडियो या उनकी encryption key को migrate नहीं करती। आगे बढ़ने से पहले सुनिश्चित करें कि आप अपने owner खाते में हाल ही में दोबारा sign in कर चुके हैं।")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("CONTINUE", (dialog, which) -> beginOwnerDeviceEnrollment())
+                .show();
+    }
+
+    private void beginOwnerDeviceEnrollment() {
+        Toast.makeText(this, "Owner device enrollment शुरू हो रहा है...", Toast.LENGTH_LONG).show();
+        OwnerDeviceSecurity security = new OwnerDeviceSecurity(this);
+        security.beginEnrollment().addOnCompleteListener(task -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (!task.isSuccessful() || task.getResult() == null
+                    || !(task.getResult().getData() instanceof java.util.Map)) {
+                String message = task.getException() != null
+                        ? task.getException().getLocalizedMessage()
+                        : "Server से सही challenge नहीं मिला।";
+                Toast.makeText(this, "Enrollment शुरू नहीं हुआ: " + message, Toast.LENGTH_LONG).show();
+                return;
+            }
+            try {
+                java.util.Map<?, ?> challenge = (java.util.Map<?, ?>) task.getResult().getData();
+                String challengeId = String.valueOf(challenge.get("challengeId"));
+                String nonce = String.valueOf(challenge.get("nonce"));
+                String purpose = String.valueOf(challenge.get("purpose"));
+                if (challengeId.isEmpty() || nonce.isEmpty() || !"initial-enrollment".equals(purpose)) {
+                    throw new IllegalStateException("Server challenge अधूरा या गलत है।");
+                }
+                security.completeEnrollment(challengeId, nonce, purpose)
+                        .addOnCompleteListener(completion -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            if (completion.isSuccessful()) {
+                                Toast.makeText(this,
+                                        "यह फोन owner device के रूप में register हो गया है।",
+                                        Toast.LENGTH_LONG).show();
+                            } else {
+                                String error = completion.getException() != null
+                                        ? completion.getException().getLocalizedMessage()
+                                        : "Server ने enrollment पूरा नहीं किया।";
+                                Toast.makeText(this, "Enrollment पूरा नहीं हुआ: " + error,
+                                        Toast.LENGTH_LONG).show();
+                            }
+                        });
+            } catch (Exception e) {
+                Toast.makeText(this, "Enrollment error: " + e.getLocalizedMessage(),
+                        Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void saveReceiverDetails() {
