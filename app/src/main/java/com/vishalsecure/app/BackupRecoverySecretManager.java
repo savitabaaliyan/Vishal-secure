@@ -103,7 +103,7 @@ public final class BackupRecoverySecretManager {
                 throw new IllegalStateException("Stored Backup Recovery Secret is invalid.");
             }
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            cipher.init(Cipher.DECRYPT_MODE, getOrCreateWrappingKey(), new GCMParameterSpec(128, iv));
+            cipher.init(Cipher.DECRYPT_MODE, getExistingWrappingKey(), new GCMParameterSpec(128, iv));
             cipher.updateAAD(aad);
             byte[] secret = cipher.doFinal(ciphertext);
             if (secret.length != SECRET_BYTES) {
@@ -139,6 +139,19 @@ public final class BackupRecoverySecretManager {
             Arrays.fill(iv, (byte) 0);
             Arrays.fill(ciphertext, (byte) 0);
         }
+    }
+
+    private SecretKey getExistingWrappingKey() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance(KEYSTORE);
+        keyStore.load(null);
+        if (!keyStore.containsAlias(keyAlias)) {
+            throw new IllegalStateException("Backup wrapping key is missing; refusing to generate a replacement.");
+        }
+        KeyStore.Entry entry = keyStore.getEntry(keyAlias, null);
+        if (entry instanceof KeyStore.SecretKeyEntry) {
+            return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
+        }
+        throw new IllegalStateException("Backup wrapping key is invalid; refusing to replace it.");
     }
 
     private SecretKey getOrCreateWrappingKey() throws Exception {
