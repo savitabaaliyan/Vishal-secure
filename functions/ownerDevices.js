@@ -236,7 +236,7 @@ exports.createOwnerRecoveryCode = onCall(async (request) => {
     tx.set(ownerRef.collection('recovery').doc('current'), {
       salt, digest, createdAt: FieldValue.serverTimestamp(),
       expiresAt: Timestamp.fromMillis(Date.now() + RECOVERY_CODE_TTL_MS),
-      used: false
+      used: false, attempts: 0
     });
     const eventRef = db.collection('ownerAudit').doc(uid).collection('events').doc();
     tx.set(eventRef, { type: 'recovery-code-issued', actorUid: uid, createdAt: FieldValue.serverTimestamp() });
@@ -256,6 +256,16 @@ exports.recoverOwnerDevice = onCall(async (request) => {
   const challengeRef = db.collection('ownerDeviceChallenges').doc(challengeId);
   const ownerRef = db.collection('ownerDevices').doc(uid);
   const recoveryRef = ownerRef.collection('recovery').doc('current');
+  // Count every recovery attempt in a separate committed transaction so a failed
+  // code check cannot roll back the abuse-control counter.
+  const attemptCount = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(recoveryRef);
+    if (!snap.exists) fail('failed-precondition', 'Recovery information is unavailable.');
+    const next = Number(snap.data().attempts || 0) + 1;
+    tx.update(recoveryRef, { attempts: next, lastAttemptAt: FieldValue.serverTimestamp() });
+    return next;
+  });
+  if (attemptCount > 5) fail('resource-exhausted', 'Too many recovery attempts. Issue a new recovery code after verifying your account.');
   await db.runTransaction(async (tx) => {
     const [rSnap, cSnap, ownerSnap] = await Promise.all([tx.get(recoveryRef), tx.get(challengeRef), tx.get(ownerRef)]);
     if (!rSnap.exists || !cSnap.exists || !ownerSnap.exists) fail('failed-precondition', 'Recovery information is unavailable.');
