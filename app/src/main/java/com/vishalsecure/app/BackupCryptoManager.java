@@ -1,7 +1,5 @@
 package com.vishalsecure.app;
 
-import android.util.Base64;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
