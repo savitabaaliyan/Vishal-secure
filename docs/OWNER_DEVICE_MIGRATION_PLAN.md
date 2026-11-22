@@ -141,3 +141,12 @@ No secrets, passwords, OTP values, private keys, or recovery codes should be pla
 - Confirmed by source inspection that the legacy `bindDevice` callable remains present.
 - These are source-level checks only. No Node syntax test, Firebase Emulator test, Android integration test, or deployment has been performed.
 - Remaining release blockers include server-side active-device enforcement on all privileged callables and Storage access, per-request proof-of-possession, recovery issuance rate controls, and end-to-end testing.
+
+
+### Abuse-control hardening — 2026-11-22
+
+- Added Firestore-backed rate limits for owner-device challenge creation: 10 requests per purpose in a rolling 10-minute window.
+- Limited recovery-code issuance to 3 requests per owner per 24-hour window.
+- Recovery now verifies that the owner has a valid active-device record before attempting to revoke it and activate the replacement.
+- These changes are committed on the work branch only. They have not been deployed or emulator-tested.
+- Remaining blockers are unchanged: per-request proof-of-possession for privileged calls, active-device enforcement with a safe compatibility rollout, Android integration, backup/key recovery, automated tests, and end-to-end verification.
