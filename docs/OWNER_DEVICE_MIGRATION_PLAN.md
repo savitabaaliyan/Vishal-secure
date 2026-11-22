@@ -118,3 +118,17 @@ Keep the owner's identity and authority stable while allowing the owner to repla
 4. What is the policy if both the old phone and registered mobile number are unavailable?
 
 No secrets, passwords, OTP values, private keys, or recovery codes should be placed in this repository document.
+
+
+## Implementation progress — 2026-11-22
+
+- Added `functions/ownerDevices.js` with callable endpoints for initial enrollment, old-device replacement approval, recovery-code issuance, recovery, and safe device-status lookup.
+- Exported the module from `functions/index.js`.
+- These endpoints are scaffolding and are not deployed or connected to Android yet.
+- Important remaining work before any production use:
+  - Complete and verify the two-stage replacement proof protocol so both old and new installation keys sign distinct, server-issued challenges.
+  - Add active-device checks to every privileged callable and protected Storage access, with a deliberate compatibility/migration policy for existing installations.
+  - Add rate limits/abuse controls for recovery attempts and challenge creation, plus App Check/Play Integrity integration.
+  - Add automated tests and run Firebase Emulator tests.
+  - Integrate Android Keystore key generation/signing and recovery UI.
+- Do not deploy this branch until the above security gates and end-to-end tests pass.
