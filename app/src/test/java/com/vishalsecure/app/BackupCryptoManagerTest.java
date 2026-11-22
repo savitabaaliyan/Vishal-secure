@@ -66,6 +66,25 @@ public class BackupCryptoManagerTest {
     }
 
 
+    @Test public void rejectsOverlongRestoreIdentityBeforeCreatingOutput() throws Exception {
+        File dir = tempDir();
+        File source = new File(dir, "source.bin");
+        File encrypted = new File(dir, "object.vsb");
+        File restored = new File(dir, "restored.bin");
+        byte[] secret = randomBytes(32);
+        try (FileOutputStream out = new FileOutputStream(source)) { out.write(randomBytes(32)); }
+        assertTrue(BackupCryptoManager.encryptFile(source, encrypted, "owner-uid", "video-123", secret));
+
+        String tooLongUid = new String(new char[1025]).replace('\\0', 'u');
+        String tooLongObjectId = new String(new char[1025]).replace('\\0', 'v');
+        assertFalse(BackupCryptoManager.decryptFile(encrypted, restored,
+                tooLongUid, "video-123", secret));
+        assertFalse(restored.exists());
+        assertFalse(BackupCryptoManager.decryptFile(encrypted, restored,
+                "owner-uid", tooLongObjectId, secret));
+        assertFalse(restored.exists());
+    }
+
     @Test public void rejectsExistingOutputWithoutOverwritingIt() throws Exception {
         File dir = tempDir();
         File source = new File(dir, "source.bin");
