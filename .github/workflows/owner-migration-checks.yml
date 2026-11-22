@@ -7,6 +7,7 @@ on:
       - vs-4-owner-migration
     paths:
       - 'functions/**'
+      - 'app/**'
       - '.github/workflows/owner-migration-checks.yml'
 
 jobs:
