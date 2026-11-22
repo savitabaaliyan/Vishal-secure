@@ -18,6 +18,73 @@ function cleanText(value, maxLength) {
   return value.trim().slice(0, maxLength);
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
+async function requireActiveOwnerDeviceProof(request, operation, expectedPayload) {
+  const uid = request.auth.uid;
+  const ownerRef = db.collection('ownerDevices').doc(uid);
+  const ownerSnap = await ownerRef.get();
+  // Compatibility rollout: accounts not yet enrolled in the owner-device system
+  // continue using the existing VS-3/VS-4 backend path until Android migration.
+  if (!ownerSnap.exists) return;
+  const activeDeviceId = ownerSnap.data().activeDeviceId;
+  if (!activeDeviceId) {
+    throw new HttpsError('permission-denied', 'No active owner device is registered for this account.');
+  }
+  const proof = request.data && request.data.deviceProof;
+  if (!proof || cleanText(proof.deviceId, 80) !== activeDeviceId
+      || !cleanText(proof.challengeId, 64) || !cleanText(proof.signature, 1024)
+      || stableJson(proof.payload) !== stableJson(expectedPayload)) {
+    throw new HttpsError('permission-denied', 'A valid active-device signature is required for this action.');
+  }
+
+  const challengeRef = db.collection('ownerDeviceChallenges').doc(proof.challengeId);
+  const deviceRef = ownerRef.collection('devices').doc(activeDeviceId);
+  await db.runTransaction(async (tx) => {
+    const [challengeSnap, deviceSnap, currentOwnerSnap] = await Promise.all([
+      tx.get(challengeRef), tx.get(deviceRef), tx.get(ownerRef)
+    ]);
+    if (!challengeSnap.exists || !deviceSnap.exists || !currentOwnerSnap.exists) {
+      throw new HttpsError('permission-denied', 'The active-device proof is unavailable.');
+    }
+    const challenge = challengeSnap.data();
+    const device = deviceSnap.data();
+    if (currentOwnerSnap.data().activeDeviceId !== activeDeviceId || device.status !== 'active'
+        || challenge.uid !== uid || challenge.deviceId !== activeDeviceId
+        || challenge.purpose !== 'sensitive-request:' + operation
+        || challenge.operation !== operation || challenge.used
+        || challenge.requestHash !== crypto.createHash('sha256').update(stableJson(expectedPayload)).digest('hex')
+        || !(challenge.expiresAt instanceof Timestamp) || challenge.expiresAt.toMillis() <= Date.now()) {
+      throw new HttpsError('permission-denied', 'The active-device proof is expired, replayed, or bound to another request.');
+    }
+    const message = [challenge.id, challenge.nonce, challenge.uid, challenge.deviceId,
+      challenge.purpose, challenge.requestHash].join('.');
+    let valid = false;
+    try {
+      const publicKey = crypto.createPublicKey(device.publicKey);
+      if (publicKey.asymmetricKeyType === 'ec' || publicKey.asymmetricKeyType === 'ed25519') {
+        valid = crypto.verify(
+          publicKey.asymmetricKeyType === 'ed25519' ? null : 'sha256',
+          Buffer.from(message, 'utf8'),
+          publicKey,
+          Buffer.from(proof.signature, 'base64')
+        );
+      }
+    } catch (_) {
+      valid = false;
+    }
+    if (!valid) throw new HttpsError('permission-denied', 'The active-device signature could not be verified.');
+    tx.update(challengeRef, { used: true, usedAt: FieldValue.serverTimestamp() });
+    tx.update(deviceRef, { lastSeenAt: FieldValue.serverTimestamp() });
+  });
+}
+
 async function requireVerifiedSender(uid) {
   const user = await getAuth().getUser(uid);
   const providers = new Set((user.providerData || []).map((p) => p.providerId));
@@ -79,6 +146,13 @@ exports.createVideoAssignment = onCall(async (request) => {
   }
 
   const sender = await requireVerifiedSender(request.auth.uid);
+  const proofPayload = {
+    recipientEmail: cleanText(request.data && request.data.recipientEmail, 254).toLowerCase(),
+    recipientPhone: cleanText(request.data && request.data.recipientPhone, 32),
+    title: cleanText(request.data && request.data.title, MAX_TITLE_LENGTH) || 'Secure video',
+    expiresAtMillis: Number(request.data && request.data.expiresAtMillis)
+  };
+  await requireActiveOwnerDeviceProof(request, 'createVideoAssignment', proofPayload);
   const recipientEmail = cleanText(request.data && request.data.recipientEmail, 254).toLowerCase();
   const recipientPhone = cleanText(request.data && request.data.recipientPhone, 32);
   const title = cleanText(request.data && request.data.title, MAX_TITLE_LENGTH) || 'Secure video';
@@ -127,6 +201,7 @@ exports.finalizeVideoUpload = onCall(async (request) => {
   }
 
   const assignmentId = cleanText(request.data && request.data.assignmentId, 64);
+  await requireActiveOwnerDeviceProof(request, 'finalizeVideoUpload', { assignmentId });
   if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) {
     throw new HttpsError('invalid-argument', 'Invalid video assignment ID.');
   }
