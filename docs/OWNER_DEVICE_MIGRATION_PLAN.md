@@ -132,3 +132,12 @@ No secrets, passwords, OTP values, private keys, or recovery codes should be pla
   - Add automated tests and run Firebase Emulator tests.
   - Integrate Android Keystore key generation/signing and recovery UI.
 - Do not deploy this branch until the above security gates and end-to-end tests pass.
+
+
+### Follow-up hardening — 2026-11-22
+
+- Corrected replacement so the old installation approves a challenge first, then the new installation receives and signs a separate short-lived challenge before the atomic switch.
+- Added a five-attempt limit for recovery-code verification; attempts are committed independently so an incorrect code cannot roll back the counter.
+- Confirmed by source inspection that the legacy `bindDevice` callable remains present.
+- These are source-level checks only. No Node syntax test, Firebase Emulator test, Android integration test, or deployment has been performed.
+- Remaining release blockers include server-side active-device enforcement on all privileged callables and Storage access, per-request proof-of-possession, recovery issuance rate controls, and end-to-end testing.
