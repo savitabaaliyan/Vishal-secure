@@ -56,8 +56,7 @@ public final class BackupCryptoManager {
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
                 throw new IOException("Cannot create output directory");
             }
-            temp = new File(parent, outputFile.getName() + ".partial");
-            if (temp.exists() && !temp.delete()) throw new IOException("Cannot clear partial output");
+            temp = File.createTempFile("vsb-", ".partial", parent);
 
             SecureRandom random = new SecureRandom();
             dek = new byte[KEY_BYTES];
@@ -86,13 +85,21 @@ public final class BackupCryptoManager {
                 while ((read = readChunk(in, buffer)) > 0) {
                     if (chunkCount == Integer.MAX_VALUE) throw new IOException("Backup has too many chunks");
                     byte[] plain = Arrays.copyOf(buffer, read);
-                    byte[] encrypted = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
-                            chunkAad(header, chunkCount, read), plain);
-                    out.writeInt(read);
-                    out.write(encrypted);
-                    totalBytes += read;
-                    chunkCount++;
-                    Arrays.fill(plain, (byte) 0);
+                    byte[] encrypted = null;
+                    try {
+                        encrypted = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
+                                chunkAad(header, chunkCount, read), plain);
+                        out.writeInt(read);
+                        out.write(encrypted);
+                        if (totalBytes > Long.MAX_VALUE - read) {
+                            throw new IOException("Backup size overflow");
+                        }
+                        totalBytes += read;
+                        chunkCount++;
+                    } finally {
+                        Arrays.fill(plain, (byte) 0);
+                        if (encrypted != null) Arrays.fill(encrypted, (byte) 0);
+                    }
                 }
                 byte[] footerPlain = footerPlain(chunkCount, totalBytes);
                 byte[] footerCipher = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
@@ -132,8 +139,7 @@ public final class BackupCryptoManager {
                     || outputFile.exists()) return false;
             File parent = outputFile.getAbsoluteFile().getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) return false;
-            temp = new File(parent, outputFile.getName() + ".partial");
-            if (temp.exists() && !temp.delete()) return false;
+            temp = File.createTempFile("vsb-", ".partial", parent);
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(encryptedFile)));
                  DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(temp)))) {
@@ -159,10 +165,16 @@ public final class BackupCryptoManager {
                         in.readFully(footerCipher);
                         byte[] footer = aesGcmDecrypt(dek, chunkNonce(h.noncePrefix, expectedIndex),
                                 footerAad(h.encoded), footerCipher);
-                        if (!Arrays.equals(footer, footerPlain(declaredChunks, declaredBytes))
-                                || declaredChunks != expectedIndex || declaredBytes != totalBytes
-                                || in.read() != -1) throw new IOException("Invalid backup footer");
-                        Arrays.fill(footer, (byte) 0);
+                        byte[] expectedFooter = footerPlain(declaredChunks, declaredBytes);
+                        try {
+                            if (!Arrays.equals(footer, expectedFooter)
+                                    || declaredChunks != expectedIndex || declaredBytes != totalBytes
+                                    || in.read() != -1) throw new IOException("Invalid backup footer");
+                        } finally {
+                            Arrays.fill(footer, (byte) 0);
+                            Arrays.fill(expectedFooter, (byte) 0);
+                            Arrays.fill(footerCipher, (byte) 0);
+                        }
                         break;
                     }
                     if (length < 1 || length > CHUNK_SIZE || expectedIndex == Integer.MAX_VALUE) {
@@ -173,10 +185,17 @@ public final class BackupCryptoManager {
                     byte[] plain = aesGcmDecrypt(dek, chunkNonce(h.noncePrefix, expectedIndex),
                             chunkAad(h.encoded, expectedIndex, length), cipherText);
                     if (plain.length != length) throw new IOException("Invalid chunk");
-                    out.write(plain);
-                    totalBytes += plain.length;
-                    expectedIndex++;
-                    Arrays.fill(plain, (byte) 0);
+                    try {
+                        if (totalBytes > Long.MAX_VALUE - plain.length) {
+                            throw new IOException("Restored file size overflow");
+                        }
+                        out.write(plain);
+                        totalBytes += plain.length;
+                        expectedIndex++;
+                    } finally {
+                        Arrays.fill(plain, (byte) 0);
+                        Arrays.fill(cipherText, (byte) 0);
+                    }
                 }
                 out.flush();
             }
@@ -316,21 +335,29 @@ public final class BackupCryptoManager {
         byte[] prk = mac.doFinal(ikm);
         byte[] result = new byte[length];
         byte[] previous = new byte[0];
-        int offset = 0;
-        int counter = 1;
-        while (offset < length) {
-            mac.init(new SecretKeySpec(prk, "HmacSHA256"));
-            mac.update(previous);
-            mac.update(info);
-            mac.update((byte) counter++);
-            previous = mac.doFinal();
-            int copy = Math.min(previous.length, length - offset);
-            System.arraycopy(previous, 0, result, offset, copy);
-            offset += copy;
+        try {
+            int offset = 0;
+            int counter = 1;
+            while (offset < length) {
+                mac.init(new SecretKeySpec(prk, "HmacSHA256"));
+                mac.update(previous);
+                mac.update(info);
+                mac.update((byte) counter++);
+                byte[] next = mac.doFinal();
+                Arrays.fill(previous, (byte) 0);
+                previous = next;
+                int copy = Math.min(previous.length, length - offset);
+                System.arraycopy(previous, 0, result, offset, copy);
+                offset += copy;
+            }
+            return result;
+        } catch (Exception e) {
+            Arrays.fill(result, (byte) 0);
+            throw e;
+        } finally {
+            Arrays.fill(prk, (byte) 0);
+            Arrays.fill(previous, (byte) 0);
         }
-        Arrays.fill(prk, (byte) 0);
-        Arrays.fill(previous, (byte) 0);
-        return result;
     }
 
     private static final class Header {
