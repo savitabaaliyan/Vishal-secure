@@ -47,7 +47,7 @@ public final class BackupRecoverySecretManager {
         byte[] secret = new byte[SECRET_BYTES];
         new SecureRandom().nextBytes(secret);
         try {
-            saveEncrypted(secret, false);
+            saveEncrypted(secret);
             return Base64.encodeToString(secret, Base64.NO_WRAP);
         } finally {
             Arrays.fill(secret, (byte) 0);
@@ -68,7 +68,7 @@ public final class BackupRecoverySecretManager {
             if (secret.length != SECRET_BYTES) {
                 throw new IllegalArgumentException("Recovery Secret must be exactly 32 bytes.");
             }
-            saveEncrypted(secret, true);
+            saveEncrypted(secret);
         } finally {
             Arrays.fill(secret, (byte) 0);
         }
@@ -103,7 +103,7 @@ public final class BackupRecoverySecretManager {
         return prefs.contains(KEY_IV) && prefs.contains(KEY_CIPHERTEXT);
     }
 
-    private void saveEncrypted(byte[] secret, boolean imported) throws Exception {
+    private void saveEncrypted(byte[] secret) throws Exception {
         Cipher cipher = Cipher.getInstance(TRANSFORMATION);
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateWrappingKey());
         cipher.updateAAD(AAD);
