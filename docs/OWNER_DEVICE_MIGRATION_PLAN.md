@@ -145,7 +145,7 @@ No secrets, passwords, OTP values, private keys, or recovery codes should be pla
 
 ### Abuse-control hardening — 2026-11-22
 
-- Added Firestore-backed rate limits for owner-device challenge creation: 10 requests per purpose in a rolling 10-minute window.
+- Added Firestore-backed rate limits for owner-device challenge creation: 10 requests per purpose in a 10-minute window.
 - Limited recovery-code issuance to 3 requests per owner per 24-hour window.
 - Recovery now verifies that the owner has a valid active-device record before attempting to revoke it and activate the replacement.
 - These changes are committed on the work branch only. They have not been deployed or emulator-tested.
