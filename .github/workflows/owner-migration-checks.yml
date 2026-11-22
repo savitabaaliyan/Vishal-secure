@@ -47,3 +47,6 @@ jobs:
 
       - name: Compile Android debug APK
         run: gradle assembleDebug
+
+      - name: Run Android local unit tests
+        run: gradle testDebugUnitTest
