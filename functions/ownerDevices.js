@@ -37,7 +37,22 @@ async function requireOwnerAuth(request, requirePhone = true) {
   return user;
 }
 function challengeMessage(challenge) {
-  return [challenge.id, challenge.nonce, challenge.uid, challenge.deviceId, challenge.purpose].join('.');
+  const parts = [challenge.id, challenge.nonce, challenge.uid, challenge.deviceId, challenge.purpose];
+  if (challenge.requestHash) parts.push(challenge.requestHash);
+  return parts.join('.');
+}
+function stableJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+function hashProofPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    fail('invalid-argument', 'A request payload is required for device proof.');
+  }
+  return crypto.createHash('sha256').update(stableJson(payload)).digest('hex');
 }
 function verifySignature(publicKey, message, signature) {
   try {
@@ -331,6 +346,26 @@ exports.beginOwnerDeviceRecovery = onCall(async (request) => {
   await requireOwnerAuth(request, false);
   const deviceId = requiredString(request.data && request.data.deviceId, 'new installation ID', 80);
   return createChallenge(request.auth.uid, deviceId, 'recovery');
+});
+
+exports.beginOwnerSensitiveRequest = onCall(async (request) => {
+  await requireOwnerAuth(request);
+  const uid = request.auth.uid;
+  const deviceId = requiredString(request.data && request.data.deviceId, 'installation ID', 80);
+  const operation = requiredString(request.data && request.data.operation, 'operation', 64);
+  if (!['createVideoAssignment', 'finalizeVideoUpload'].includes(operation)) {
+    fail('invalid-argument', 'This operation cannot request an owner-device proof.');
+  }
+  const ownerSnap = await db.collection('ownerDevices').doc(uid).get();
+  if (!ownerSnap.exists || ownerSnap.data().activeDeviceId !== deviceId) {
+    fail('permission-denied', 'This installation is not the active owner device.');
+  }
+  const payloadHash = hashProofPayload(request.data && request.data.payload);
+  const challenge = await createChallenge(uid, deviceId, 'sensitive-request:' + operation);
+  await db.collection('ownerDeviceChallenges').doc(challenge.challengeId).update({
+    operation, requestHash: payloadHash
+  });
+  return { ...challenge, operation };
 });
 
 exports.getOwnerDeviceStatus = onCall(async (request) => {
