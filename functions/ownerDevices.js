@@ -53,7 +53,29 @@ function verifySignature(publicKey, message, signature) {
     return false;
   }
 }
+async function consumeRateLimit(uid, action, limit, windowMs) {
+  const ref = db.collection('ownerDeviceRateLimits').doc(uid + '_' + action);
+  const now = Date.now();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists ? snap.data() : {};
+    const windowStart = Number(current.windowStart || 0);
+    const count = windowStart && now - windowStart < windowMs ? Number(current.count || 0) : 0;
+    if (count >= limit) {
+      fail('resource-exhausted', 'Too many ' + action.replace(/-/g, ' ') + ' requests. Please wait and try again.');
+    }
+    tx.set(ref, {
+      uid,
+      action,
+      windowStart: count ? windowStart : now,
+      count: count + 1,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  });
+}
+
 async function createChallenge(uid, deviceId, purpose) {
+  await consumeRateLimit(uid, 'challenge-' + purpose, 10, 10 * 60 * 1000);
   const id = crypto.randomUUID();
   const nonce = crypto.randomBytes(32).toString('base64url');
   const expiresAt = Timestamp.fromMillis(Date.now() + CHALLENGE_TTL_MS);
@@ -225,6 +247,7 @@ exports.completeOwnerDeviceReplacement = onCall(async (request) => {
 
 exports.createOwnerRecoveryCode = onCall(async (request) => {
   await requireOwnerAuth(request);
+  await consumeRateLimit(request.auth.uid, 'recovery-code-issue', 3, 24 * 60 * 60 * 1000);
   const uid = request.auth.uid;
   const ownerRef = db.collection('ownerDevices').doc(uid);
   const ownerSnap = await ownerRef.get();
