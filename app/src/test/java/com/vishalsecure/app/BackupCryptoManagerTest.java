@@ -65,6 +65,55 @@ public class BackupCryptoManagerTest {
         assertFalse(wrongOwnerOutput.exists());
     }
 
+
+    @Test public void rejectsExistingOutputWithoutOverwritingIt() throws Exception {
+        File dir = tempDir();
+        File source = new File(dir, "source.bin");
+        File encrypted = new File(dir, "object.vsb");
+        byte[] secret = randomBytes(32);
+        byte[] original = new byte[] {7, 8, 9};
+        try (FileOutputStream out = new FileOutputStream(source)) { out.write(randomBytes(64)); }
+        try (FileOutputStream out = new FileOutputStream(encrypted)) { out.write(original); }
+        assertFalse(BackupCryptoManager.encryptFile(source, encrypted, "owner-uid", "video-123", secret));
+        byte[] after = new byte[(int) encrypted.length()];
+        try (FileInputStream in = new FileInputStream(encrypted)) {
+            assertEquals(after.length, in.read(after));
+        }
+        assertArrayEquals(original, after);
+    }
+
+    @Test public void rejectsHeaderTamperingAndTrailingBytes() throws Exception {
+        File dir = tempDir();
+        File source = new File(dir, "source.bin");
+        File encrypted = new File(dir, "object.vsb");
+        File badHeader = new File(dir, "bad-header.vsb");
+        File trailing = new File(dir, "trailing.vsb");
+        byte[] secret = randomBytes(32);
+        try (FileOutputStream out = new FileOutputStream(source)) { out.write(randomBytes(512)); }
+        assertTrue(BackupCryptoManager.encryptFile(source, encrypted, "owner-uid", "video-123", secret));
+        byte[] bytes = new byte[(int) encrypted.length()];
+        try (FileInputStream in = new FileInputStream(encrypted)) {
+            int offset = 0, read;
+            while ((read = in.read(bytes, offset, bytes.length - offset)) > 0) offset += read;
+            assertEquals(bytes.length, offset);
+        }
+        byte[] headerChanged = bytes.clone();
+        headerChanged[8] ^= 0x01;
+        try (FileOutputStream out = new FileOutputStream(badHeader)) { out.write(headerChanged); }
+        try (FileOutputStream out = new FileOutputStream(trailing)) {
+            out.write(bytes);
+            out.write(0x55);
+        }
+        File badHeaderOutput = new File(dir, "bad-header-output.bin");
+        File trailingOutput = new File(dir, "trailing-output.bin");
+        assertFalse(BackupCryptoManager.decryptFile(badHeader, badHeaderOutput,
+                "owner-uid", "video-123", secret));
+        assertFalse(BackupCryptoManager.decryptFile(trailing, trailingOutput,
+                "owner-uid", "video-123", secret));
+        assertFalse(badHeaderOutput.exists());
+        assertFalse(trailingOutput.exists());
+    }
+
     @Test public void rejectsTamperedBackupAndTruncation() throws Exception {
         File dir = tempDir();
         File source = new File(dir, "source.bin");
