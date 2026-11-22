@@ -173,3 +173,11 @@ No secrets, passwords, OTP values, private keys, or recovery codes should be pla
 - Extended the dedicated migration workflow to compile the Android debug APK in CI, without using release signing secrets.
 - This is an integration foundation, not a finished user-facing migration flow: no automatic enrollment is triggered, no replacement/recovery screens are wired, and existing local video encryption/storage code is unchanged.
 - Do not deploy the backend or enroll a real owner account until the CI build and backend syntax checks pass, the callable flow is reviewed end-to-end, and the Android UI/restore flow is completed.
+
+
+### Encrypted backup and key recovery architecture — 2026-11-22
+
+- Added `docs/ENCRYPTED_BACKUP_KEY_RECOVERY.md` with a versioned envelope-encryption proposal, per-video random DEKs, offline backup recovery secret, wrapped DEKs, authenticated metadata, private Storage authorization, legacy migration constraints, recovery/rotation policy, and rollout gates.
+- This is architecture documentation only. No backup encryption, upload, restore, Storage-rule, or Firebase deployment code has been added.
+- Legacy `.vsec` files remain decryptable only on a device that still has the original Android Keystore key. They must be migrated while the old phone is available; an unbacked-up legacy file cannot be recovered after the old phone is lost.
+- The one-time owner-device Recovery Code and the separate Backup Recovery Secret serve different purposes and must never be conflated.
