@@ -161,34 +161,53 @@ exports.approveOwnerDeviceReplacement = onCall(async (request) => {
   return { approved: true };
 });
 
+exports.beginOwnerReplacementDeviceProof = onCall(async (request) => {
+  await requireOwnerAuth(request);
+  const uid = request.auth.uid;
+  const replacementId = requiredString(request.data && request.data.replacementId, 'replacement ID', 64);
+  const replacementRef = db.collection('ownerDeviceReplacements').doc(replacementId);
+  const snap = await replacementRef.get();
+  if (!snap.exists || snap.data().uid !== uid || snap.data().status !== 'old-device-approved'
+      || !(snap.data().expiresAt instanceof Timestamp) || snap.data().expiresAt.toMillis() <= Date.now()) {
+    fail('failed-precondition', 'Old-device approval is missing or expired.');
+  }
+  const result = await createChallenge(uid, snap.data().newDeviceId, 'replacement-new-device');
+  await db.collection('ownerDeviceChallenges').doc(result.challengeId).update({ replacementId });
+  return result;
+});
+
 exports.completeOwnerDeviceReplacement = onCall(async (request) => {
   await requireOwnerAuth(request);
   const uid = request.auth.uid;
-  const challengeId = requiredString(request.data && request.data.challengeId, 'challenge ID', 64);
+  const replacementId = requiredString(request.data && request.data.replacementId, 'replacement ID', 64);
+  const proofChallengeId = requiredString(request.data && request.data.proofChallengeId, 'proof challenge ID', 64);
   const deviceId = requiredString(request.data && request.data.deviceId, 'new installation ID', 80);
   const publicKey = requiredString(request.data && request.data.publicKey, 'new public key', 4096);
   const signature = requiredString(request.data && request.data.signature, 'new device signature', 1024);
-  const challenge = await createChallenge(uid, deviceId, 'replacement-new-device');
-  const replacementRef = db.collection('ownerDeviceReplacements').doc(challengeId);
-  const challengeRef = db.collection('ownerDeviceChallenges').doc(challenge.challengeId);
-  await db.collection('ownerDeviceChallenges').doc(challenge.challengeId).update({
-    replacementId: challengeId
-  });
+  const replacementRef = db.collection('ownerDeviceReplacements').doc(replacementId);
+  const challengeRef = db.collection('ownerDeviceChallenges').doc(proofChallengeId);
   await db.runTransaction(async (tx) => {
     const [rSnap, cSnap] = await Promise.all([tx.get(replacementRef), tx.get(challengeRef)]);
-    if (!rSnap.exists || !cSnap.exists) fail('not-found', 'Replacement request not found.');
+    if (!rSnap.exists || !cSnap.exists) fail('not-found', 'Replacement request or proof challenge not found.');
     const r = rSnap.data();
     const c = cSnap.data();
     if (r.uid !== uid || r.newDeviceId !== deviceId || r.status !== 'old-device-approved'
+        || c.uid !== uid || c.deviceId !== deviceId || c.purpose !== 'replacement-new-device'
+        || c.replacementId !== replacementId || c.used
+        || !(c.expiresAt instanceof Timestamp) || c.expiresAt.toMillis() <= Date.now()
         || !(r.expiresAt instanceof Timestamp) || r.expiresAt.toMillis() <= Date.now()) {
-      fail('failed-precondition', 'Old-device approval is missing or expired.');
+      fail('failed-precondition', 'Replacement approval or new-device challenge is missing, expired, or invalid.');
     }
-    if (!verifySignature(publicKey, challengeMessage(c), signature)) fail('permission-denied', 'New device key proof could not be verified.');
+    if (!verifySignature(publicKey, challengeMessage(c), signature)) {
+      fail('permission-denied', 'New device key proof could not be verified.');
+    }
     const ownerRef = db.collection('ownerDevices').doc(uid);
     const oldRef = ownerRef.collection('devices').doc(r.oldDeviceId);
     const newRef = ownerRef.collection('devices').doc(deviceId);
     const ownerSnap = await tx.get(ownerRef);
-    if (!ownerSnap.exists || ownerSnap.data().activeDeviceId !== r.oldDeviceId) fail('aborted', 'The active device changed. Start replacement again.');
+    if (!ownerSnap.exists || ownerSnap.data().activeDeviceId !== r.oldDeviceId) {
+      fail('aborted', 'The active device changed. Start replacement again.');
+    }
     tx.update(oldRef, { status: 'revoked', revokedAt: FieldValue.serverTimestamp(), replacedBy: deviceId });
     tx.create(newRef, {
       uid, deviceId, publicKey, platform: 'android', status: 'active',
