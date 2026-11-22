@@ -102,14 +102,19 @@ public final class BackupCryptoManager {
                     }
                 }
                 byte[] footerPlain = footerPlain(chunkCount, totalBytes);
-                byte[] footerCipher = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
-                        footerAad(header), footerPlain);
-                out.writeInt(FOOTER_MARKER);
-                out.writeInt(chunkCount);
-                out.writeLong(totalBytes);
-                out.write(footerCipher);
-                out.flush();
-                Arrays.fill(footerPlain, (byte) 0);
+                byte[] footerCipher = null;
+                try {
+                    footerCipher = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
+                            footerAad(header), footerPlain);
+                    out.writeInt(FOOTER_MARKER);
+                    out.writeInt(chunkCount);
+                    out.writeLong(totalBytes);
+                    out.write(footerCipher);
+                    out.flush();
+                } finally {
+                    Arrays.fill(footerPlain, (byte) 0);
+                    if (footerCipher != null) Arrays.fill(footerCipher, (byte) 0);
+                }
             }
             if (!temp.renameTo(outputFile)) throw new IOException("Cannot finalize backup file");
             return true;
@@ -225,6 +230,9 @@ public final class BackupCryptoManager {
                 || objectId.getBytes(StandardCharsets.UTF_8).length > MAX_ID_BYTES) {
             throw new IOException("Backup identity is too long");
         }
+        if (input.getCanonicalFile().equals(output.getCanonicalFile())) {
+            throw new IOException("Input and output must be different files");
+        }
     }
 
     private static int readChunk(DataInputStream in, byte[] buffer) throws IOException {
@@ -232,8 +240,13 @@ public final class BackupCryptoManager {
         while (count < buffer.length) {
             int n = in.read(buffer, count, buffer.length - count);
             if (n < 0) break;
-            if (n == 0) continue;
-            count += n;
+            if (n == 0) {
+                int one = in.read();
+                if (one < 0) break;
+                buffer[count++] = (byte) one;
+            } else {
+                count += n;
+            }
         }
         return count;
     }
