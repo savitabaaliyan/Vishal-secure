@@ -47,6 +47,8 @@ public final class BackupCryptoManager {
                                       String ownerUid, String objectId,
                                       byte[] recoverySecret) {
         File temp = null;
+        byte[] dek = null;
+        byte[] wrappingKey = null;
         try {
             validateArguments(inputFile, outputFile, ownerUid, objectId, recoverySecret);
             if (outputFile.exists()) throw new IOException("Output already exists");
@@ -58,7 +60,7 @@ public final class BackupCryptoManager {
             if (temp.exists() && !temp.delete()) throw new IOException("Cannot clear partial output");
 
             SecureRandom random = new SecureRandom();
-            byte[] dek = new byte[KEY_BYTES];
+            dek = new byte[KEY_BYTES];
             byte[] salt = new byte[SALT_BYTES];
             byte[] wrapIv = new byte[GCM_IV_BYTES];
             byte[] noncePrefix = new byte[NONCE_PREFIX_BYTES];
@@ -70,7 +72,7 @@ public final class BackupCryptoManager {
             byte[] uidBytes = ownerUid.getBytes(StandardCharsets.UTF_8);
             byte[] objectBytes = objectId.getBytes(StandardCharsets.UTF_8);
             byte[] wrapAad = wrapAad(uidBytes, objectBytes);
-            byte[] wrappingKey = hkdfSha256(recoverySecret, salt, wrapInfo(uidBytes, objectBytes), KEY_BYTES);
+            wrappingKey = hkdfSha256(recoverySecret, salt, wrapInfo(uidBytes, objectBytes), KEY_BYTES);
             byte[] wrappedDek = aesGcmEncrypt(wrappingKey, wrapIv, wrapAad, dek);
             byte[] header = makeHeader(salt, wrapIv, noncePrefix, uidBytes, objectBytes, wrappedDek);
 
@@ -103,12 +105,13 @@ public final class BackupCryptoManager {
                 Arrays.fill(footerPlain, (byte) 0);
             }
             if (!temp.renameTo(outputFile)) throw new IOException("Cannot finalize backup file");
-            Arrays.fill(dek, (byte) 0);
-            Arrays.fill(wrappingKey, (byte) 0);
             return true;
         } catch (Exception e) {
             if (temp != null && temp.exists()) temp.delete();
             return false;
+        } finally {
+            if (dek != null) Arrays.fill(dek, (byte) 0);
+            if (wrappingKey != null) Arrays.fill(wrappingKey, (byte) 0);
         }
     }
 
