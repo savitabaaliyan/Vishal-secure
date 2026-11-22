@@ -225,3 +225,6 @@ exports.bindDevice = onCall(async (request) => {
   return result;
 });
 
+
+// Export the owner-device lifecycle as independent callable endpoints.
+Object.assign(exports, require('./ownerDevices'));
