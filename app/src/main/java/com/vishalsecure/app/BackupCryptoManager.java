@@ -134,9 +134,13 @@ public final class BackupCryptoManager {
         byte[] wrappingKey = null;
         try {
             if (encryptedFile == null || !encryptedFile.isFile() || outputFile == null
-                    || expectedOwnerUid == null || expectedObjectId == null
+                    || expectedOwnerUid == null || expectedOwnerUid.isEmpty()
+                    || expectedObjectId == null || expectedObjectId.isEmpty()
+                    || expectedOwnerUid.getBytes(StandardCharsets.UTF_8).length > MAX_ID_BYTES
+                    || expectedObjectId.getBytes(StandardCharsets.UTF_8).length > MAX_ID_BYTES
                     || recoverySecret == null || recoverySecret.length != KEY_BYTES
-                    || outputFile.exists()) return false;
+                    || outputFile.exists()
+                    || encryptedFile.getCanonicalFile().equals(outputFile.getCanonicalFile())) return false;
             File parent = outputFile.getAbsoluteFile().getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) return false;
             temp = File.createTempFile("vsb-", ".partial", parent);
@@ -181,11 +185,12 @@ public final class BackupCryptoManager {
                         throw new IOException("Invalid chunk length");
                     }
                     byte[] cipherText = new byte[length + GCM_TAG_BYTES];
-                    in.readFully(cipherText);
-                    byte[] plain = aesGcmDecrypt(dek, chunkNonce(h.noncePrefix, expectedIndex),
-                            chunkAad(h.encoded, expectedIndex, length), cipherText);
-                    if (plain.length != length) throw new IOException("Invalid chunk");
+                    byte[] plain = null;
                     try {
+                        in.readFully(cipherText);
+                        plain = aesGcmDecrypt(dek, chunkNonce(h.noncePrefix, expectedIndex),
+                                chunkAad(h.encoded, expectedIndex, length), cipherText);
+                        if (plain.length != length) throw new IOException("Invalid chunk");
                         if (totalBytes > Long.MAX_VALUE - plain.length) {
                             throw new IOException("Restored file size overflow");
                         }
@@ -193,7 +198,7 @@ public final class BackupCryptoManager {
                         totalBytes += plain.length;
                         expectedIndex++;
                     } finally {
-                        Arrays.fill(plain, (byte) 0);
+                        if (plain != null) Arrays.fill(plain, (byte) 0);
                         Arrays.fill(cipherText, (byte) 0);
                     }
                 }
