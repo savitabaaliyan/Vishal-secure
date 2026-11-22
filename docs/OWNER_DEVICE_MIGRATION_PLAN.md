@@ -150,3 +150,14 @@ No secrets, passwords, OTP values, private keys, or recovery codes should be pla
 - Recovery now verifies that the owner has a valid active-device record before attempting to revoke it and activate the replacement.
 - These changes are committed on the work branch only. They have not been deployed or emulator-tested.
 - Remaining blockers are unchanged: per-request proof-of-possession for privileged calls, active-device enforcement with a safe compatibility rollout, Android integration, backup/key recovery, automated tests, and end-to-end verification.
+
+
+### Active-device proof rollout — 2026-11-22
+
+- Added `beginOwnerSensitiveRequest`, which issues a short-lived, rate-limited challenge bound to an allowlisted privileged operation and a SHA-256 hash of its exact payload.
+- Added server-side proof verification to `createVideoAssignment` and `finalizeVideoUpload` for accounts that have enrolled in `ownerDevices/{uid}`.
+- The proof is checked against the current active device's registered public key. The challenge is consumed transactionally and cannot be replayed; the operation and canonical payload hash must match.
+- Compatibility policy: accounts with no owner-device enrollment record continue through the existing backend path. Once an account is enrolled, the two privileged callables require device proof. This is a staged backend gate, not a complete rollout.
+- Android has not yet been updated to request the challenge, canonicalize the payload, sign the server challenge using Android Keystore, and attach `deviceProof`. Therefore do not enroll a production account or deploy these changes until Android integration and tests are complete.
+- The Node syntax-check workflow is configured to run on changes to the Functions directory. Its result must be checked in GitHub Actions before treating syntax validation as passed.
+- Storage access, direct Storage URL access, other privileged endpoints, Android integration, App Check/Play Integrity, automated emulator tests, backup/key recovery, and physical-device tests remain open.
