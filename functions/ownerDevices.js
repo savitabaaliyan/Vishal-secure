@@ -365,7 +365,7 @@ exports.beginOwnerSensitiveRequest = onCall(async (request) => {
   await db.collection('ownerDeviceChallenges').doc(challenge.challengeId).update({
     operation, requestHash: payloadHash
   });
-  return { ...challenge, operation };
+  return { ...challenge, operation, requestHash: payloadHash };
 });
 
 exports.getOwnerDeviceStatus = onCall(async (request) => {
