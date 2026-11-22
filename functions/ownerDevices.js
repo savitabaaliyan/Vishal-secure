@@ -295,17 +295,22 @@ exports.recoverOwnerDevice = onCall(async (request) => {
     const r = rSnap.data();
     const c = cSnap.data();
     const activeDeviceId = ownerSnap.data().activeDeviceId;
+    if (!activeDeviceId) fail('failed-precondition', 'There is no active device to replace.');
     if (r.used || !(r.expiresAt instanceof Timestamp) || r.expiresAt.toMillis() <= Date.now()
         || c.uid !== uid || c.deviceId !== deviceId || c.purpose !== 'recovery' || c.used
         || !(c.expiresAt instanceof Timestamp) || c.expiresAt.toMillis() <= Date.now()) {
       fail('failed-precondition', 'Recovery code or challenge is expired or already used.');
+    }
+    const oldRef = ownerRef.collection('devices').doc(activeDeviceId);
+    const oldSnap = await tx.get(oldRef);
+    if (!oldSnap.exists || oldSnap.data().status !== 'active') {
+      fail('failed-precondition', 'The current active-device record is unavailable.');
     }
     const expected = crypto.createHash('sha256').update(r.salt + code).digest('hex');
     if (!crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(r.digest, 'hex'))) {
       fail('permission-denied', 'Recovery code is incorrect.');
     }
     if (!verifySignature(publicKey, challengeMessage(c), signature)) fail('permission-denied', 'New device key proof could not be verified.');
-    const oldRef = ownerRef.collection('devices').doc(activeDeviceId);
     const newRef = ownerRef.collection('devices').doc(deviceId);
     tx.update(oldRef, { status: 'revoked', revokedAt: FieldValue.serverTimestamp(), replacedBy: deviceId, revocationReason: 'recovery' });
     tx.create(newRef, {
