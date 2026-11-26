@@ -51,6 +51,9 @@ public final class BackupCryptoManager {
         byte[] dek = null;
         byte[] wrappingKey = null;
         byte[] plaintextBuffer = null;
+        byte[] salt = null, wrapIv = null, noncePrefix = null;
+        byte[] uidBytes = null, objectBytes = null, wrapAadBytes = null, wrapInfoBytes = null;
+        byte[] wrappedDek = null, header = null;
         try {
             validateArguments(inputFile, outputFile, ownerUid, objectId, recoverySecret);
             File parent = outputFile.getAbsoluteFile().getParentFile();
@@ -63,20 +66,21 @@ public final class BackupCryptoManager {
 
             SecureRandom random = new SecureRandom();
             dek = new byte[KEY_BYTES];
-            byte[] salt = new byte[SALT_BYTES];
-            byte[] wrapIv = new byte[GCM_IV_BYTES];
-            byte[] noncePrefix = new byte[NONCE_PREFIX_BYTES];
+            salt = new byte[SALT_BYTES];
+            wrapIv = new byte[GCM_IV_BYTES];
+            noncePrefix = new byte[NONCE_PREFIX_BYTES];
             random.nextBytes(dek);
             random.nextBytes(salt);
             random.nextBytes(wrapIv);
             random.nextBytes(noncePrefix);
 
-            byte[] uidBytes = ownerUid.getBytes(StandardCharsets.UTF_8);
-            byte[] objectBytes = objectId.getBytes(StandardCharsets.UTF_8);
-            byte[] wrapAad = wrapAad(uidBytes, objectBytes);
-            wrappingKey = hkdfSha256(recoverySecret, salt, wrapInfo(uidBytes, objectBytes), KEY_BYTES);
-            byte[] wrappedDek = aesGcmEncrypt(wrappingKey, wrapIv, wrapAad, dek);
-            byte[] header = makeHeader(salt, wrapIv, noncePrefix, uidBytes, objectBytes, wrappedDek);
+            uidBytes = ownerUid.getBytes(StandardCharsets.UTF_8);
+            objectBytes = objectId.getBytes(StandardCharsets.UTF_8);
+            wrapAadBytes = wrapAad(uidBytes, objectBytes);
+            wrapInfoBytes = wrapInfo(uidBytes, objectBytes);
+            wrappingKey = hkdfSha256(recoverySecret, salt, wrapInfoBytes, KEY_BYTES);
+            wrappedDek = aesGcmEncrypt(wrappingKey, wrapIv, wrapAadBytes, dek);
+            header = makeHeader(salt, wrapIv, noncePrefix, uidBytes, objectBytes, wrappedDek);
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(inputFile)));
                  DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(temp)))) {
@@ -90,8 +94,14 @@ public final class BackupCryptoManager {
                     byte[] plain = Arrays.copyOf(plaintextBuffer, read);
                     byte[] encrypted = null;
                     try {
-                        encrypted = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
-                                chunkAad(header, chunkCount, read), plain);
+                        byte[] nonce = chunkNonce(noncePrefix, chunkCount);
+                        byte[] aad = chunkAad(header, chunkCount, read);
+                        try {
+                            encrypted = aesGcmEncrypt(dek, nonce, aad, plain);
+                        } finally {
+                            Arrays.fill(nonce, (byte) 0);
+                            Arrays.fill(aad, (byte) 0);
+                        }
                         out.writeInt(read);
                         out.write(encrypted);
                         if (totalBytes > Long.MAX_VALUE - read) {
@@ -107,8 +117,14 @@ public final class BackupCryptoManager {
                 byte[] footerPlain = footerPlain(chunkCount, totalBytes);
                 byte[] footerCipher = null;
                 try {
-                    footerCipher = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
-                            footerAad(header), footerPlain);
+                    byte[] nonce = chunkNonce(noncePrefix, chunkCount);
+                    byte[] aad = footerAad(header);
+                    try {
+                        footerCipher = aesGcmEncrypt(dek, nonce, aad, footerPlain);
+                    } finally {
+                        Arrays.fill(nonce, (byte) 0);
+                        Arrays.fill(aad, (byte) 0);
+                    }
                     out.writeInt(FOOTER_MARKER);
                     out.writeInt(chunkCount);
                     out.writeLong(totalBytes);
@@ -130,6 +146,15 @@ public final class BackupCryptoManager {
             if (dek != null) Arrays.fill(dek, (byte) 0);
             if (wrappingKey != null) Arrays.fill(wrappingKey, (byte) 0);
             if (plaintextBuffer != null) Arrays.fill(plaintextBuffer, (byte) 0);
+            if (salt != null) Arrays.fill(salt, (byte) 0);
+            if (wrapIv != null) Arrays.fill(wrapIv, (byte) 0);
+            if (noncePrefix != null) Arrays.fill(noncePrefix, (byte) 0);
+            if (uidBytes != null) Arrays.fill(uidBytes, (byte) 0);
+            if (objectBytes != null) Arrays.fill(objectBytes, (byte) 0);
+            if (wrapAadBytes != null) Arrays.fill(wrapAadBytes, (byte) 0);
+            if (wrapInfoBytes != null) Arrays.fill(wrapInfoBytes, (byte) 0);
+            if (wrappedDek != null) Arrays.fill(wrappedDek, (byte) 0);
+            if (header != null) Arrays.fill(header, (byte) 0);
         }
     }
 
@@ -144,6 +169,8 @@ public final class BackupCryptoManager {
         boolean outputReserved = false;
         byte[] dek = null;
         byte[] wrappingKey = null;
+        Header h = null;
+        byte[] uidBytes = null, objectBytes = null, wrapInfoBytes = null, wrapAadBytes = null;
         try {
             if (encryptedFile == null || !encryptedFile.isFile() || outputFile == null
                     || expectedOwnerUid == null || expectedOwnerUid.isEmpty()
@@ -160,15 +187,16 @@ public final class BackupCryptoManager {
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(encryptedFile)));
                  DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(temp)))) {
-                Header h = readHeader(in);
-                byte[] uidBytes = expectedOwnerUid.getBytes(StandardCharsets.UTF_8);
-                byte[] objectBytes = expectedObjectId.getBytes(StandardCharsets.UTF_8);
+                h = readHeader(in);
+                uidBytes = expectedOwnerUid.getBytes(StandardCharsets.UTF_8);
+                objectBytes = expectedObjectId.getBytes(StandardCharsets.UTF_8);
                 if (!Arrays.equals(uidBytes, h.uid) || !Arrays.equals(objectBytes, h.objectId)) {
                     throw new IOException("Backup identity mismatch");
                 }
-                wrappingKey = hkdfSha256(recoverySecret, h.salt,
-                        wrapInfo(h.uid, h.objectId), KEY_BYTES);
-                dek = aesGcmDecrypt(wrappingKey, h.wrapIv, wrapAad(h.uid, h.objectId), h.wrappedDek);
+                wrapInfoBytes = wrapInfo(h.uid, h.objectId);
+                wrapAadBytes = wrapAad(h.uid, h.objectId);
+                wrappingKey = hkdfSha256(recoverySecret, h.salt, wrapInfoBytes, KEY_BYTES);
+                dek = aesGcmDecrypt(wrappingKey, h.wrapIv, wrapAadBytes, h.wrappedDek);
                 if (dek.length != KEY_BYTES) throw new IOException("Invalid data key");
 
                 int expectedIndex = 0;
@@ -180,10 +208,12 @@ public final class BackupCryptoManager {
                         long declaredBytes = in.readLong();
                         byte[] footerCipher = new byte[FOOTER_TEXT.length + 4 + 8 + GCM_TAG_BYTES];
                         in.readFully(footerCipher);
-                        byte[] footer = aesGcmDecrypt(dek, chunkNonce(h.noncePrefix, expectedIndex),
-                                footerAad(h.encoded), footerCipher);
+                        byte[] footer = null;
                         byte[] expectedFooter = footerPlain(declaredChunks, declaredBytes);
+                        byte[] nonce = chunkNonce(h.noncePrefix, expectedIndex);
+                        byte[] aad = footerAad(h.encoded);
                         try {
+                            footer = aesGcmDecrypt(dek, nonce, aad, footerCipher);
                             if (!Arrays.equals(footer, expectedFooter)
                                     || declaredChunks != expectedIndex || declaredBytes != totalBytes
                                     || in.read() != -1) throw new IOException("Invalid backup footer");
@@ -191,6 +221,8 @@ public final class BackupCryptoManager {
                             Arrays.fill(footer, (byte) 0);
                             Arrays.fill(expectedFooter, (byte) 0);
                             Arrays.fill(footerCipher, (byte) 0);
+                            Arrays.fill(nonce, (byte) 0);
+                            Arrays.fill(aad, (byte) 0);
                         }
                         break;
                     }
@@ -201,8 +233,14 @@ public final class BackupCryptoManager {
                     byte[] plain = null;
                     try {
                         in.readFully(cipherText);
-                        plain = aesGcmDecrypt(dek, chunkNonce(h.noncePrefix, expectedIndex),
-                                chunkAad(h.encoded, expectedIndex, length), cipherText);
+                        byte[] nonce = chunkNonce(h.noncePrefix, expectedIndex);
+                        byte[] aad = chunkAad(h.encoded, expectedIndex, length);
+                        try {
+                            plain = aesGcmDecrypt(dek, nonce, aad, cipherText);
+                        } finally {
+                            Arrays.fill(nonce, (byte) 0);
+                            Arrays.fill(aad, (byte) 0);
+                        }
                         if (plain.length != length) throw new IOException("Invalid chunk");
                         if (totalBytes > Long.MAX_VALUE - plain.length) {
                             throw new IOException("Restored file size overflow");
@@ -227,6 +265,11 @@ public final class BackupCryptoManager {
         } finally {
             if (dek != null) Arrays.fill(dek, (byte) 0);
             if (wrappingKey != null) Arrays.fill(wrappingKey, (byte) 0);
+            if (uidBytes != null) Arrays.fill(uidBytes, (byte) 0);
+            if (objectBytes != null) Arrays.fill(objectBytes, (byte) 0);
+            if (wrapInfoBytes != null) Arrays.fill(wrapInfoBytes, (byte) 0);
+            if (wrapAadBytes != null) Arrays.fill(wrapAadBytes, (byte) 0);
+            if (h != null) h.clear();
         }
     }
 
@@ -390,5 +433,15 @@ public final class BackupCryptoManager {
 
     private static final class Header {
         byte[] salt, wrapIv, noncePrefix, uid, objectId, wrappedDek, encoded;
+
+        void clear() {
+            if (salt != null) Arrays.fill(salt, (byte) 0);
+            if (wrapIv != null) Arrays.fill(wrapIv, (byte) 0);
+            if (noncePrefix != null) Arrays.fill(noncePrefix, (byte) 0);
+            if (uid != null) Arrays.fill(uid, (byte) 0);
+            if (objectId != null) Arrays.fill(objectId, (byte) 0);
+            if (wrappedDek != null) Arrays.fill(wrappedDek, (byte) 0);
+            if (encoded != null) Arrays.fill(encoded, (byte) 0);
+        }
     }
 }
