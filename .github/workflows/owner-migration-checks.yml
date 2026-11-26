@@ -53,8 +53,6 @@ jobs:
 
   android-device-tests:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_I_WANT_MY_TCG: "yes"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,6 +67,20 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+
+      - name: Enable KVM or prepare software fallback
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+          fi
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            echo "KVM is available for Android emulator."
+          else
+            echo "KVM is unavailable; enabling emulator TCG software fallback."
+            echo "ANDROID_I_WANT_MY_TCG=yes" >> "$GITHUB_ENV"
+          fi
 
       - name: Run backup tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
