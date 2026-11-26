@@ -52,12 +52,12 @@ public final class BackupCryptoManager {
         byte[] wrappingKey = null;
         try {
             validateArguments(inputFile, outputFile, ownerUid, objectId, recoverySecret);
-            if (!outputFile.createNewFile()) throw new IOException("Output already exists");
-            outputReserved = true;
             File parent = outputFile.getAbsoluteFile().getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
                 throw new IOException("Cannot create output directory");
             }
+            if (!outputFile.createNewFile()) throw new IOException("Output already exists");
+            outputReserved = true;
             temp = File.createTempFile("vsb-", ".partial", parent);
 
             SecureRandom random = new SecureRandom();
