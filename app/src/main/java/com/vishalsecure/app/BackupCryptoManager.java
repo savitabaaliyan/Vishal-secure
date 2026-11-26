@@ -1,5 +1,7 @@
 package com.vishalsecure.app;
 
+import android.system.Os;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -116,7 +118,7 @@ public final class BackupCryptoManager {
                     if (footerCipher != null) Arrays.fill(footerCipher, (byte) 0);
                 }
             }
-            if (!temp.renameTo(outputFile)) throw new IOException("Cannot finalize backup file");
+            Os.link(temp.getAbsolutePath(), outputFile.getAbsolutePath());
             return true;
         } catch (Exception e) {
             if (temp != null && temp.exists()) temp.delete();
@@ -209,7 +211,7 @@ public final class BackupCryptoManager {
                 }
                 out.flush();
             }
-            if (!temp.renameTo(outputFile)) throw new IOException("Cannot publish restored file");
+            Os.link(temp.getAbsolutePath(), outputFile.getAbsolutePath());
             return true;
         } catch (Exception e) {
             if (temp != null && temp.exists()) temp.delete();
