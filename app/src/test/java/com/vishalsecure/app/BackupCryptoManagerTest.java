@@ -101,6 +101,26 @@ public class BackupCryptoManagerTest {
         assertArrayEquals(original, after);
     }
 
+    @Test public void restoreRefusesExistingOutputWithoutOverwritingIt() throws Exception {
+        File dir = tempDir();
+        File source = new File(dir, "source.bin");
+        File encrypted = new File(dir, "object.vsb");
+        File restored = new File(dir, "restored.bin");
+        byte[] secret = randomBytes(32);
+        byte[] existing = new byte[] {11, 22, 33, 44};
+        try (FileOutputStream out = new FileOutputStream(source)) { out.write(randomBytes(128)); }
+        assertTrue(BackupCryptoManager.encryptFile(source, encrypted, "owner-uid", "video-123", secret));
+        try (FileOutputStream out = new FileOutputStream(restored)) { out.write(existing); }
+
+        assertFalse(BackupCryptoManager.decryptFile(encrypted, restored,
+                "owner-uid", "video-123", secret));
+        byte[] after = new byte[(int) restored.length()];
+        try (FileInputStream in = new FileInputStream(restored)) {
+            assertEquals(after.length, in.read(after));
+        }
+        assertArrayEquals(existing, after);
+    }
+
     @Test public void rejectsHeaderTamperingAndTrailingBytes() throws Exception {
         File dir = tempDir();
         File source = new File(dir, "source.bin");
