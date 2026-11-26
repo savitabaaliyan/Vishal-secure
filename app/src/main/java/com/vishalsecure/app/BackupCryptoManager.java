@@ -218,7 +218,7 @@ public final class BackupCryptoManager {
                                     || declaredChunks != expectedIndex || declaredBytes != totalBytes
                                     || in.read() != -1) throw new IOException("Invalid backup footer");
                         } finally {
-                            Arrays.fill(footer, (byte) 0);
+                            if (footer != null) Arrays.fill(footer, (byte) 0);
                             Arrays.fill(expectedFooter, (byte) 0);
                             Arrays.fill(footerCipher, (byte) 0);
                             Arrays.fill(nonce, (byte) 0);
