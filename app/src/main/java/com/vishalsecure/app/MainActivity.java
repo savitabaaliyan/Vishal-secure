@@ -330,6 +330,11 @@ public class MainActivity extends Activity {
         ownerSecurityButton.setOnClickListener(v -> showOwnerDeviceEnrollmentPrompt());
         root.addView(ownerSecurityButton);
 
+        Button backupRecoveryButton = new Button(this);
+        backupRecoveryButton.setText("BACKUP RECOVERY SECRET");
+        backupRecoveryButton.setOnClickListener(v -> showBackupRecoveryMenu());
+        root.addView(backupRecoveryButton);
+
         expiryText =
                 new TextView(this);
 
@@ -441,6 +446,99 @@ public class MainActivity extends Activity {
                         Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    /**
+     * Backup Recovery Secret is separate from the Owner Device Recovery Code.
+     * It is kept locally under Android Keystore protection and never uploaded.
+     */
+    private void showBackupRecoveryMenu() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null || !user.isEmailVerified()) {
+            Toast.makeText(this, "पहले अपने verified owner खाते में login करें।", Toast.LENGTH_LONG).show();
+            return;
+        }
+        BackupRecoverySecretManager manager;
+        try {
+            manager = new BackupRecoverySecretManager(this, user.getUid());
+        } catch (Exception e) {
+            Toast.makeText(this, "Recovery सुविधा अभी उपलब्ध नहीं है।", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        if (manager.hasSecret()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Backup Recovery Secret")
+                    .setMessage("इस खाते का Secret पहले से इस फोन में सुरक्षित है। आप इसे फिर से देख सकते हैं और ऑफलाइन सुरक्षित रख सकते हैं। इसे किसी व्यक्ति को न भेजें।")
+                    .setNegativeButton("CLOSE", null)
+                    .setPositiveButton("SHOW SECRET", (dialog, which) -> showBackupRecoverySecret(manager, false))
+                    .show();
+        } else {
+            new AlertDialog.Builder(this)
+                    .setTitle("Backup Recovery Secret")
+                    .setMessage("यह 32-byte Secret नए फोन पर आपके encrypted backup को restore करने के लिए होगा। इसे अभी बनाना जरूरी नहीं है। इसे कागज या सुरक्षित password manager में offline रखें। इसे खोने पर इस फोन की local copy नए फोन पर काम नहीं करेगी।")
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("CREATE SECRET", (dialog, which) -> showBackupRecoverySecret(manager, true))
+                    .setNeutralButton("IMPORT", (dialog, which) -> showBackupRecoveryImport(manager))
+                    .show();
+        }
+    }
+
+    private void showBackupRecoverySecret(BackupRecoverySecretManager manager, boolean create) {
+        try {
+            String encoded = create
+                    ? manager.createAndExportOnce()
+                    : manager.exportExistingSecretForOwner();
+
+            EditText secretView = new EditText(this);
+            secretView.setText(encoded);
+            secretView.setTextIsSelectable(true);
+            secretView.setSingleLine(false);
+            secretView.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                    | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                    | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+            secretView.setPadding(24, 16, 24, 16);
+
+            new AlertDialog.Builder(this)
+                    .setTitle("आपका Backup Recovery Secret")
+                    .setMessage("इसे offline सुरक्षित जगह पर लिखकर रखें। यह केवल आपके owner खाते के लिए है। किसी को न भेजें। स्क्रीन बंद होने पर भी आप इसी फोन से इसे फिर देख सकते हैं।")
+                    .setView(secretView)
+                    .setCancelable(false)
+                    .setPositiveButton("मैंने सुरक्षित रख लिया", (dialog, which) ->
+                            Toast.makeText(this, "Secret इस फोन में सुरक्षित है।", Toast.LENGTH_LONG).show())
+                    .setNegativeButton("बाद में", (dialog, which) -> { })
+                    .show();
+        } catch (Exception e) {
+            Toast.makeText(this, "Secret उपलब्ध नहीं हुआ: " + e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showBackupRecoveryImport(BackupRecoverySecretManager manager) {
+        EditText input = new EditText(this);
+        input.setHint("Paste 32-byte Backup Recovery Secret");
+        input.setSingleLine(false);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        new AlertDialog.Builder(this)
+                .setTitle("Import Backup Recovery Secret")
+                .setMessage("यह विकल्प केवल नए फोन पर उपयोग करें। सुनिश्चित करें कि आपने उसी Firebase owner खाते में login किया है। Import के बाद Secret इस फोन के Keystore से सुरक्षित होगा।")
+                .setView(input)
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("IMPORT", (dialog, which) -> {
+                    FirebaseUser current = FirebaseAuth.getInstance().getCurrentUser();
+                    if (current == null || !current.isEmailVerified()) {
+                        Toast.makeText(this, "Verified owner login आवश्यक है।", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    try {
+                        manager.importSecret(input.getText().toString());
+                        Toast.makeText(this, "Backup Recovery Secret इस फोन में सुरक्षित import हो गया।", Toast.LENGTH_LONG).show();
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Import नहीं हुआ: " + e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .show();
     }
 
     private void saveReceiverDetails() {
