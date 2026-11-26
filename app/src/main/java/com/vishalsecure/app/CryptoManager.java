@@ -90,6 +90,25 @@ public class CryptoManager {
         return keyGenerator.generateKey();
     }
 
+
+    /**
+     * Decryption must never create a replacement key. If the original
+     * Android Keystore key is missing, legacy .vsec data is unrecoverable
+     * on this installation and the operation must fail closed.
+     */
+    private static SecretKey getExistingKey() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance(KEYSTORE_NAME);
+        keyStore.load(null);
+        if (!keyStore.containsAlias(KEY_ALIAS)) {
+            throw new IllegalStateException("Original video encryption key is missing.");
+        }
+        KeyStore.Entry entry = keyStore.getEntry(KEY_ALIAS, null);
+        if (!(entry instanceof KeyStore.SecretKeyEntry)) {
+            throw new IllegalStateException("Original video encryption key is invalid.");
+        }
+        return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
+    }
+
     public static boolean encryptFile(
             File inputFile,
             File outputFile
@@ -289,7 +308,7 @@ public class CryptoManager {
         try {
 
             SecretKey key =
-                    getOrCreateKey();
+                    getExistingKey();
 
             try (
                     FileInputStream input =
