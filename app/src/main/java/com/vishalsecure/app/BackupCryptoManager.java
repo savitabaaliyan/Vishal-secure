@@ -1,7 +1,5 @@
 package com.vishalsecure.app;
 
-import android.system.Os;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -49,11 +47,13 @@ public final class BackupCryptoManager {
                                       String ownerUid, String objectId,
                                       byte[] recoverySecret) {
         File temp = null;
+        boolean outputReserved = false;
         byte[] dek = null;
         byte[] wrappingKey = null;
         try {
             validateArguments(inputFile, outputFile, ownerUid, objectId, recoverySecret);
-            if (outputFile.exists()) throw new IOException("Output already exists");
+            if (!outputFile.createNewFile()) throw new IOException("Output already exists");
+            outputReserved = true;
             File parent = outputFile.getAbsoluteFile().getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
                 throw new IOException("Cannot create output directory");
@@ -118,10 +118,12 @@ public final class BackupCryptoManager {
                     if (footerCipher != null) Arrays.fill(footerCipher, (byte) 0);
                 }
             }
-            Os.link(temp.getAbsolutePath(), outputFile.getAbsolutePath());
+            if (!temp.renameTo(outputFile)) throw new IOException("Cannot finalize backup file");
+            outputReserved = false;
             return true;
         } catch (Exception e) {
             if (temp != null && temp.exists()) temp.delete();
+            if (outputReserved && outputFile.exists()) outputFile.delete();
             return false;
         } finally {
             if (dek != null) Arrays.fill(dek, (byte) 0);
@@ -137,6 +139,7 @@ public final class BackupCryptoManager {
                                       String expectedOwnerUid, String expectedObjectId,
                                       byte[] recoverySecret) {
         File temp = null;
+        boolean outputReserved = false;
         byte[] dek = null;
         byte[] wrappingKey = null;
         try {
@@ -146,10 +149,11 @@ public final class BackupCryptoManager {
                     || expectedOwnerUid.getBytes(StandardCharsets.UTF_8).length > MAX_ID_BYTES
                     || expectedObjectId.getBytes(StandardCharsets.UTF_8).length > MAX_ID_BYTES
                     || recoverySecret == null || recoverySecret.length != KEY_BYTES
-                    || outputFile.exists()
                     || encryptedFile.getCanonicalFile().equals(outputFile.getCanonicalFile())) return false;
             File parent = outputFile.getAbsoluteFile().getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) return false;
+            if (!outputFile.createNewFile()) return false;
+            outputReserved = true;
             temp = File.createTempFile("vsb-", ".partial", parent);
 
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(encryptedFile)));
@@ -211,10 +215,12 @@ public final class BackupCryptoManager {
                 }
                 out.flush();
             }
-            Os.link(temp.getAbsolutePath(), outputFile.getAbsolutePath());
+            if (!temp.renameTo(outputFile)) throw new IOException("Cannot publish restored file");
+            outputReserved = false;
             return true;
         } catch (Exception e) {
             if (temp != null && temp.exists()) temp.delete();
+            if (outputReserved && outputFile.exists()) outputFile.delete();
             return false;
         } finally {
             if (dek != null) Arrays.fill(dek, (byte) 0);
