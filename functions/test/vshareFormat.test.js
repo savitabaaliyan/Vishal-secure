@@ -24,7 +24,7 @@ const FIXTURE = Object.freeze({
   keyVersion: 1,
   fingerprint: Buffer.from(Array.from({ length: 32 }, (_, i) => 0xa0 + i)),
   wrappedDek: Buffer.alloc(384, 0x5a),
-  plaintext: Buffer.from('Vishal Secure vshare test vector 1', 'utf8')
+  plaintext: Buffer.concat([Buffer.from('Vishal Secure vshare multi-chunk test vector 1:', 'utf8'), Buffer.alloc(CHUNK_SIZE + 17, 0x6b)])
 });
 
 function u16(n) { const b = Buffer.alloc(2); b.writeUInt16BE(n); return b; }
@@ -232,4 +232,43 @@ test('vshare rejects a different recipient device even for the same account', ()
     recipientUid: FIXTURE.recipientUid,
     recipientDevice: '123e4567-e89b-42d3-a456-426614174099'
   }), /device mismatch/);
+});
+
+
+test('vshare rejects wrong recipient key version and public-key fingerprint', () => {
+  const original = buildFixture();
+  assert.throws(() => parsePackage(original, {
+    key: FIXTURE.key,
+    keyVersion: FIXTURE.keyVersion + 1
+  }), /key version mismatch/);
+  const wrongFingerprint = Buffer.from(FIXTURE.fingerprint);
+  wrongFingerprint[0] ^= 0xff;
+  assert.throws(() => parsePackage(original, {
+    key: FIXTURE.key,
+    fingerprint: wrongFingerprint
+  }), /fingerprint mismatch/);
+});
+
+test('vshare rejects invalid magic, flags, and chunk size', () => {
+  const original = buildFixture();
+  const badMagic = Buffer.from(original);
+  badMagic[0] ^= 0x01;
+  assert.throws(() => parsePackage(badMagic, { key: FIXTURE.key }), /magic/);
+  const badFlags = Buffer.from(original);
+  badFlags.writeUInt16BE(1, 14);
+  assert.throws(() => parsePackage(badFlags, { key: FIXTURE.key }), /flags/);
+  const badChunkSize = Buffer.from(original);
+  badChunkSize.writeUInt32BE(CHUNK_SIZE / 2, 16);
+  assert.throws(() => parsePackage(badChunkSize, { key: FIXTURE.key }), /chunk size/);
+});
+
+test('vshare multi-chunk vector authenticates both chunks and footer', () => {
+  const packageBytes = buildFixture();
+  const headerLength = packageBytes.readUInt32BE(10);
+  assert.equal(packageBytes.readUInt32BE(26), 2);
+  assert.deepEqual(parsePackage(packageBytes, { key: FIXTURE.key }), FIXTURE.plaintext);
+  const secondChunkIndexOffset = headerLength + 9 + FIXTURE.plaintext.length - 17 + 16;
+  const reordered = Buffer.from(packageBytes);
+  reordered.writeUInt32BE(0, secondChunkIndexOffset);
+  assert.throws(() => parsePackage(reordered, { key: FIXTURE.key }), /order/);
 });
