@@ -115,7 +115,7 @@ Nonce for chunk `i` is the 8-byte header nonce prefix followed by the 4-byte big
 | Record type | u8 | `0xFF` |
 | Chunk count | u32 | Must equal header chunk count and parsed record count |
 | Total plaintext size | u64 | Must equal header size and sum of authenticated chunk lengths |
-| Footer ciphertext and tag | 28 bytes | AES-256-GCM encryption of ASCII `VSHAREEND1` (10 bytes) + u32 chunk count + u64 total plaintext size |
+| Footer ciphertext and tag | 38 bytes | AES-256-GCM encryption of ASCII `VSHAREEND1` (10 bytes) + u32 chunk count + u64 total plaintext size (22-byte plaintext + 16-byte GCM tag = 38 bytes) |
 
 Footer nonce is the same 8-byte prefix followed by the 4-byte big-endian chunk count; this index is not used by any data chunk. Footer AAD is the fixed ASCII domain separator `VishalSecure.vshare.footer.v1` followed by SHA-256 of the exact encoded header bytes. The parser must require immediate EOF after the footer; trailing bytes are invalid. The footer authenticates even an otherwise empty record sequence, although version 1 disallows zero-length videos.
 
