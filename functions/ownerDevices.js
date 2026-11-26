@@ -6,6 +6,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const crypto = require('node:crypto');
+const { TRANSFER_OPERATIONS, validateTransferProofPayload } = require('./videoTransferProtocol');
 
 const db = getFirestore();
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -395,8 +396,16 @@ exports.beginOwnerSensitiveRequest = onCall(async (request) => {
   const uid = request.auth.uid;
   const deviceId = requiredString(request.data && request.data.deviceId, 'installation ID', 80);
   const operation = requiredString(request.data && request.data.operation, 'operation', 64);
-  if (!['createVideoAssignment', 'finalizeVideoUpload', 'createOwnerRecoveryCode'].includes(operation)) {
+  const existingOperations = ['createVideoAssignment', 'finalizeVideoUpload', 'createOwnerRecoveryCode'];
+  if (!existingOperations.includes(operation) && !TRANSFER_OPERATIONS.has(operation)) {
     fail('invalid-argument', 'This operation cannot request an owner-device proof.');
+  }
+  if (TRANSFER_OPERATIONS.has(operation)) {
+    try {
+      validateTransferProofPayload(operation, request.data && request.data.payload);
+    } catch (_) {
+      fail('invalid-argument', 'The video transfer proof payload is invalid for this operation.');
+    }
   }
   const ownerSnap = await db.collection('ownerDevices').doc(uid).get();
   if (!ownerSnap.exists || ownerSnap.data().activeDeviceId !== deviceId) {
