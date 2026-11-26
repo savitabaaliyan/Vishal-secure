@@ -569,8 +569,10 @@ public class MainActivity extends Activity {
                 .setNegativeButton("CANCEL", null)
                 .setPositiveButton("IMPORT", (dialog, which) -> {
                     FirebaseUser current = FirebaseAuth.getInstance().getCurrentUser();
-                    if (current == null || !current.isEmailVerified()) {
-                        Toast.makeText(this, "Verified owner login आवश्यक है।", Toast.LENGTH_LONG).show();
+                    if (current == null || !current.isEmailVerified()
+                            || !current.getUid().equals(manager.getOwnerUid())) {
+                        Toast.makeText(this, "उसी verified Firebase owner खाते में login करें जिसके लिए Secret बनाया गया था।",
+                                Toast.LENGTH_LONG).show();
                         return;
                     }
                     try {
