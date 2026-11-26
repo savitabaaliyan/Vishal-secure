@@ -127,6 +127,11 @@ public final class BackupRecoverySecretManager {
         }
     }
 
+    /** Returns the Firebase UID this manager instance is permanently bound to. */
+    public String getOwnerUid() {
+        return ownerUid;
+    }
+
     public synchronized boolean hasSecret() {
         SharedPreferences prefs = appContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE);
         return prefs.contains(KEY_IV) && prefs.contains(KEY_CIPHERTEXT);
