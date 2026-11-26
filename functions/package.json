@@ -7,7 +7,8 @@
     "node": "20"
   },
   "scripts": {
-    "lint": "node --check index.js",
+    "lint": "node --check index.js && node --check ownerDevices.js && node --check videoTransferProtocol.js",
+    "test": "node --test test/*.test.js",
     "serve": "firebase emulators:start --only functions,firestore,storage",
     "deploy": "firebase deploy --only functions,firestore:rules,storage"
   },
