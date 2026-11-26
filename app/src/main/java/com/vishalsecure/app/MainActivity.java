@@ -458,6 +458,47 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "पहले अपने verified owner खाते में login करें।", Toast.LENGTH_LONG).show();
             return;
         }
+        requireOwnerPasswordReauthentication(user, () -> showBackupRecoveryMenuAfterReauth(user));
+    }
+
+    private void requireOwnerPasswordReauthentication(FirebaseUser user, Runnable onSuccess) {
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            Toast.makeText(this, "Owner email उपलब्ध नहीं है। दोबारा login करें।", Toast.LENGTH_LONG).show();
+            return;
+        }
+        EditText passwordInput = new EditText(this);
+        passwordInput.setHint("Owner account password");
+        passwordInput.setSingleLine(true);
+        passwordInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        new AlertDialog.Builder(this)
+                .setTitle("Owner verification")
+                .setMessage("Backup Recovery Secret देखने या import करने से पहले अपने owner खाते का password दोबारा सत्यापित करें।")
+                .setView(passwordInput)
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("VERIFY", (dialog, which) -> {
+                    String password = passwordInput.getText().toString();
+                    if (password.isEmpty()) {
+                        Toast.makeText(this, "Password दर्ज करें।", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    com.google.firebase.auth.AuthCredential credential =
+                            com.google.firebase.auth.EmailAuthProvider.getCredential(user.getEmail(), password);
+                    passwordInput.setText("");
+                    user.reauthenticate(credential).addOnCompleteListener(this, task -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (task.isSuccessful()) {
+                            onSuccess.run();
+                        } else {
+                            Toast.makeText(this, "Owner verification असफल। Password जाँचें और फिर प्रयास करें।",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    });
+                })
+                .show();
+    }
+
+    private void showBackupRecoveryMenuAfterReauth(FirebaseUser user) {
         BackupRecoverySecretManager manager;
         try {
             manager = new BackupRecoverySecretManager(this, user.getUid());
@@ -479,7 +520,8 @@ public class MainActivity extends Activity {
                     .setMessage("यह 32-byte Secret नए फोन पर आपके encrypted backup को restore करने के लिए होगा। इसे अभी बनाना जरूरी नहीं है। इसे कागज या सुरक्षित password manager में offline रखें। इसे खोने पर इस फोन की local copy नए फोन पर काम नहीं करेगी।")
                     .setNegativeButton("CANCEL", null)
                     .setPositiveButton("CREATE SECRET", (dialog, which) -> showBackupRecoverySecret(manager, true))
-                    .setNeutralButton("IMPORT", (dialog, which) -> showBackupRecoveryImport(manager))
+                    .setNeutralButton("IMPORT", (dialog, which) ->
+                            requireOwnerPasswordReauthentication(user, () -> showBackupRecoveryImport(manager)))
                     .show();
         }
     }
