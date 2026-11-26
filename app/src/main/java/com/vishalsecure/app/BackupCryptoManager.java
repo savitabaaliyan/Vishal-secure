@@ -50,6 +50,7 @@ public final class BackupCryptoManager {
         boolean outputReserved = false;
         byte[] dek = null;
         byte[] wrappingKey = null;
+        byte[] plaintextBuffer = null;
         try {
             validateArguments(inputFile, outputFile, ownerUid, objectId, recoverySecret);
             File parent = outputFile.getAbsoluteFile().getParentFile();
@@ -80,13 +81,13 @@ public final class BackupCryptoManager {
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(inputFile)));
                  DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(temp)))) {
                 out.write(header);
-                byte[] buffer = new byte[CHUNK_SIZE];
+                plaintextBuffer = new byte[CHUNK_SIZE];
                 int chunkCount = 0;
                 long totalBytes = 0;
                 int read;
-                while ((read = readChunk(in, buffer)) > 0) {
+                while ((read = readChunk(in, plaintextBuffer)) > 0) {
                     if (chunkCount == Integer.MAX_VALUE) throw new IOException("Backup has too many chunks");
-                    byte[] plain = Arrays.copyOf(buffer, read);
+                    byte[] plain = Arrays.copyOf(plaintextBuffer, read);
                     byte[] encrypted = null;
                     try {
                         encrypted = aesGcmEncrypt(dek, chunkNonce(noncePrefix, chunkCount),
@@ -128,6 +129,7 @@ public final class BackupCryptoManager {
         } finally {
             if (dek != null) Arrays.fill(dek, (byte) 0);
             if (wrappingKey != null) Arrays.fill(wrappingKey, (byte) 0);
+            if (plaintextBuffer != null) Arrays.fill(plaintextBuffer, (byte) 0);
         }
     }
 
