@@ -66,6 +66,16 @@ public final class BackupRecoverySecretManager {
         }
     }
 
+    /** Re-displays the locally protected secret after an interrupted export flow. */
+    public synchronized String exportExistingSecretForOwner() throws Exception {
+        byte[] secret = getSecretForOperation();
+        try {
+            return Base64.encodeToString(secret, Base64.NO_WRAP);
+        } finally {
+            Arrays.fill(secret, (byte) 0);
+        }
+    }
+
     /** Imports a previously exported secret on a replacement phone for this same Firebase UID. */
     public synchronized void importSecret(String base64Secret) throws Exception {
         if (hasSecret()) throw new IllegalStateException("A Backup Recovery Secret is already stored.");
