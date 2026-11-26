@@ -25,9 +25,11 @@ The legacy format must not be silently reinterpreted or modified. Sharing will u
 ### 3.1 Separate recipient encryption key
 
 - Each enrolled device receives a separate recipient-encryption key pair, distinct from the existing P-256 signing key.
-- Initial compatibility candidate: RSA-3072 with RSA-OAEP using SHA-256 and MGF1-SHA-256, generated and held by Android Keystore; only the public key is registered with the authenticated server.
-- This is a candidate, not yet an approved implementation. The exact Android API 24+ provider behavior, Keystore support, OAEP parameters, backup/restore behavior, and emulator/device compatibility must be proven by tests before adoption.
-- The server stores the public key, key version, owning Firebase UID, device ID, status, and creation/revocation timestamps. It never stores the private key.
+- Compatibility profile selected for investigation: RSA-3072 with RSA-OAEP using the main digest SHA-256 and MGF1 digest SHA-1 (OAEP SHA-256 / MGF1-SHA-1). This is deliberately explicit and avoids relying on provider defaults. The profile is a compatibility compromise, not an assertion that MGF1-SHA-1 is equally strong as SHA-256.
+- Android Keystore's MGF1 digest configuration API is not uniformly available across the full API 24+ range. The implementation must explicitly request the selected OAEP parameters and prove that each supported API/provider actually honors them. Never silently fall back to a provider default or a different digest.
+- If an API 24+ provider cannot generate/use this exact profile reliably, that Android version/device must fail closed; do not weaken parameters further. Revisit the minimum supported Android version only with the user's approval.
+- RSA-3072 key generation, OAEP encryption/decryption, non-exportability, backup/restore behavior, and emulator plus physical-device compatibility remain unproven until tests pass.
+- Only the public key is registered with the authenticated server. The server stores public key, key version, owning Firebase UID, device ID, status, and creation/revocation timestamps; it never stores the private key.
 - Public-key registration must be authenticated and bound to the same active-device enrollment/replacement protocol. A recipient cannot substitute another user's key.
 
 ### 3.2 Per-share content encryption
@@ -37,7 +39,7 @@ For each new share:
 1. Generate a fresh cryptographically random 256-bit DEK on the sender phone.
 2. Stream-decrypt the sender's local `.vsec` and stream-encrypt the video using the DEK with AES-256-GCM in independently authenticated chunks. Do not create a plaintext video file on disk.
 3. Use a unique nonce for every chunk under that DEK. Bind package version, assignment ID, recipient UID, sender UID, chunk index, plaintext length, and immutable header digest as authenticated additional data (AAD).
-4. Wrap the DEK with the recipient's registered RSA public key using the exact RSA-OAEP-SHA-256/MGF1-SHA-256 parameters.
+4. Wrap the DEK with the recipient's registered RSA public key using RSA-OAEP main digest SHA-256 and MGF1 digest SHA-1, with the exact OAEP parameters explicitly specified at both ends.
 5. Put only the wrapped DEK, public metadata, chunk parameters, and encrypted video chunks in the `.vshare` package.
 6. Clear transient key and plaintext buffers as soon as practical. Never log keys, plaintext, OTPs, recovery codes, or private-key material.
 
@@ -89,7 +91,7 @@ All integer fields use unsigned big-endian/network byte order unless explicitly 
 | Assignment ID | 36 bytes | Lowercase canonical UUID ASCII |
 | Share ID | 36 bytes | Lowercase canonical UUID ASCII |
 | Wrapped DEK length | u16 | Exactly 384 for RSA-3072 |
-| Wrapped DEK | 384 bytes | RSA-OAEP-SHA-256 with MGF1-SHA-256 |
+| Wrapped DEK | 384 bytes | RSA-OAEP main digest SHA-256, MGF1 digest SHA-1 |
 
 The header length must equal the exact sum of these encoded fields. UID strings must be valid UTF-8, non-empty, and compared byte-for-byte with the authenticated expected identities. UUID fields must pass canonical lowercase UUID validation. The key fingerprint and key version must match the recipient device key registered by the trusted server; a package cannot select an arbitrary local key.
 
