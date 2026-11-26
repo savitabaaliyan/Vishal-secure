@@ -1,6 +1,5 @@
 package com.vishalsecure.app;
 
-import android.security.keystore.KeyStoreException;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -14,7 +13,6 @@ import java.util.Arrays;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
