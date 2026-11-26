@@ -46,11 +46,15 @@ public final class BackupRecoverySecretManager {
         appContext = context.getApplicationContext();
         ownerUid = firebaseUid;
         byte[] uidBytes = ownerUid.getBytes(StandardCharsets.UTF_8);
-        String suffix = hex(sha256(uidBytes));
-        prefsName = PREFS_PREFIX + suffix;
-        keyAlias = KEY_ALIAS_PREFIX + suffix;
-        aad = concat("VishalSecure Backup Recovery Secret v1".getBytes(StandardCharsets.UTF_8),
-                new byte[] {0}, uidBytes);
+        try {
+            String suffix = hex(sha256(uidBytes));
+            prefsName = PREFS_PREFIX + suffix;
+            keyAlias = KEY_ALIAS_PREFIX + suffix;
+            aad = concat("VishalSecure Backup Recovery Secret v1".getBytes(StandardCharsets.UTF_8),
+                    new byte[] {0}, uidBytes);
+        } finally {
+            Arrays.fill(uidBytes, (byte) 0);
+        }
     }
 
     /** Creates a new secret only when none is stored. Returns its one-time export form. */
@@ -79,7 +83,9 @@ public final class BackupRecoverySecretManager {
     /** Imports a previously exported secret on a replacement phone for this same Firebase UID. */
     public synchronized void importSecret(String base64Secret) throws Exception {
         if (hasSecret()) throw new IllegalStateException("A Backup Recovery Secret is already stored.");
-        if (base64Secret == null) throw new IllegalArgumentException("Recovery Secret is required.");
+        if (base64Secret == null || base64Secret.trim().length() > 64) {
+            throw new IllegalArgumentException("Recovery Secret is required or too long.");
+        }
         byte[] secret;
         try {
             secret = Base64.decode(base64Secret.trim(), Base64.NO_WRAP);
