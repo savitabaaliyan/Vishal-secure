@@ -306,49 +306,77 @@ public final class BackupCryptoManager {
 
     private static byte[] makeHeader(byte[] salt, byte[] wrapIv, byte[] noncePrefix,
                                      byte[] uid, byte[] objectId, byte[] wrappedDek) throws IOException {
-        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(bytes);
-        out.write(MAGIC);
-        out.writeInt(VERSION);
-        out.writeInt(CHUNK_SIZE);
-        out.write(salt);
-        out.write(wrapIv);
-        out.write(noncePrefix);
-        out.writeShort(uid.length);
-        out.write(uid);
-        out.writeShort(objectId.length);
-        out.write(objectId);
-        out.writeInt(wrappedDek.length);
-        out.write(wrappedDek);
-        out.flush();
-        return bytes.toByteArray();
+        WipingByteArrayOutputStream bytes = new WipingByteArrayOutputStream();
+        try {
+            DataOutputStream out = new DataOutputStream(bytes);
+            out.write(MAGIC);
+            out.writeInt(VERSION);
+            out.writeInt(CHUNK_SIZE);
+            out.write(salt);
+            out.write(wrapIv);
+            out.write(noncePrefix);
+            out.writeShort(uid.length);
+            out.write(uid);
+            out.writeShort(objectId.length);
+            out.write(objectId);
+            out.writeInt(wrappedDek.length);
+            out.write(wrappedDek);
+            out.flush();
+            return bytes.toByteArray();
+        } finally {
+            bytes.clear();
+        }
     }
 
     private static Header readHeader(DataInputStream in) throws Exception {
-        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-        DataOutputStream copy = new DataOutputStream(bytes);
-        byte[] magic = new byte[MAGIC.length]; in.readFully(magic); copy.write(magic);
-        if (!Arrays.equals(magic, MAGIC)) throw new IOException("Unknown backup format");
-        int version = in.readInt(); copy.writeInt(version);
-        int chunkSize = in.readInt(); copy.writeInt(chunkSize);
-        if (version != VERSION || chunkSize != CHUNK_SIZE) throw new IOException("Unsupported backup version");
-        byte[] salt = new byte[SALT_BYTES]; in.readFully(salt); copy.write(salt);
-        byte[] wrapIv = new byte[GCM_IV_BYTES]; in.readFully(wrapIv); copy.write(wrapIv);
-        byte[] prefix = new byte[NONCE_PREFIX_BYTES]; in.readFully(prefix); copy.write(prefix);
-        int uidLength = in.readUnsignedShort(); copy.writeShort(uidLength);
-        if (uidLength < 1 || uidLength > MAX_ID_BYTES) throw new IOException("Invalid owner id");
-        byte[] uid = new byte[uidLength]; in.readFully(uid); copy.write(uid);
-        int objectLength = in.readUnsignedShort(); copy.writeShort(objectLength);
-        if (objectLength < 1 || objectLength > MAX_ID_BYTES) throw new IOException("Invalid object id");
-        byte[] objectId = new byte[objectLength]; in.readFully(objectId); copy.write(objectId);
-        int wrappedLength = in.readInt(); copy.writeInt(wrappedLength);
-        if (wrappedLength != KEY_BYTES + GCM_TAG_BYTES) throw new IOException("Invalid wrapped key");
-        byte[] wrapped = new byte[wrappedLength]; in.readFully(wrapped); copy.write(wrapped);
-        copy.flush();
-        Header h = new Header();
-        h.salt = salt; h.wrapIv = wrapIv; h.noncePrefix = prefix;
-        h.uid = uid; h.objectId = objectId; h.wrappedDek = wrapped; h.encoded = bytes.toByteArray();
-        return h;
+        WipingByteArrayOutputStream bytes = new WipingByteArrayOutputStream();
+        byte[] magic = new byte[MAGIC.length];
+        byte[] salt = null, wrapIv = null, prefix = null, uid = null, objectId = null, wrapped = null;
+        boolean transferred = false;
+        try {
+            DataOutputStream copy = new DataOutputStream(bytes);
+            in.readFully(magic); copy.write(magic);
+            if (!Arrays.equals(magic, MAGIC)) throw new IOException("Unknown backup format");
+            int version = in.readInt(); copy.writeInt(version);
+            int chunkSize = in.readInt(); copy.writeInt(chunkSize);
+            if (version != VERSION || chunkSize != CHUNK_SIZE) throw new IOException("Unsupported backup version");
+            salt = new byte[SALT_BYTES]; in.readFully(salt); copy.write(salt);
+            wrapIv = new byte[GCM_IV_BYTES]; in.readFully(wrapIv); copy.write(wrapIv);
+            prefix = new byte[NONCE_PREFIX_BYTES]; in.readFully(prefix); copy.write(prefix);
+            int uidLength = in.readUnsignedShort(); copy.writeShort(uidLength);
+            if (uidLength < 1 || uidLength > MAX_ID_BYTES) throw new IOException("Invalid owner id");
+            uid = new byte[uidLength]; in.readFully(uid); copy.write(uid);
+            int objectLength = in.readUnsignedShort(); copy.writeShort(objectLength);
+            if (objectLength < 1 || objectLength > MAX_ID_BYTES) throw new IOException("Invalid object id");
+            objectId = new byte[objectLength]; in.readFully(objectId); copy.write(objectId);
+            int wrappedLength = in.readInt(); copy.writeInt(wrappedLength);
+            if (wrappedLength != KEY_BYTES + GCM_TAG_BYTES) throw new IOException("Invalid wrapped key");
+            wrapped = new byte[wrappedLength]; in.readFully(wrapped); copy.write(wrapped);
+            copy.flush();
+            Header h = new Header();
+            h.salt = salt; h.wrapIv = wrapIv; h.noncePrefix = prefix;
+            h.uid = uid; h.objectId = objectId; h.wrappedDek = wrapped; h.encoded = bytes.toByteArray();
+            transferred = true;
+            return h;
+        } finally {
+            Arrays.fill(magic, (byte) 0);
+            bytes.clear();
+            if (!transferred) {
+                if (salt != null) Arrays.fill(salt, (byte) 0);
+                if (wrapIv != null) Arrays.fill(wrapIv, (byte) 0);
+                if (prefix != null) Arrays.fill(prefix, (byte) 0);
+                if (uid != null) Arrays.fill(uid, (byte) 0);
+                if (objectId != null) Arrays.fill(objectId, (byte) 0);
+                if (wrapped != null) Arrays.fill(wrapped, (byte) 0);
+            }
+        }
+    }
+
+    private static final class WipingByteArrayOutputStream extends java.io.ByteArrayOutputStream {
+        void clear() {
+            Arrays.fill(buf, (byte) 0);
+            reset();
+        }
     }
 
     private static byte[] wrapAad(byte[] uid, byte[] objectId) throws IOException {
