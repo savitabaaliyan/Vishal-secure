@@ -33,6 +33,7 @@ The legacy format must not be silently reinterpreted or modified. Sharing will u
 ### 3.2 Per-share content encryption
 
 For each new share:
+
 1. Generate a fresh cryptographically random 256-bit DEK on the sender phone.
 2. Stream-decrypt the sender's local `.vsec` and stream-encrypt the video using the DEK with AES-256-GCM in independently authenticated chunks. Do not create a plaintext video file on disk.
 3. Use a unique nonce for every chunk under that DEK. Bind package version, assignment ID, recipient UID, sender UID, chunk index, plaintext length, and immutable header digest as authenticated additional data (AAD).
@@ -63,6 +64,66 @@ The sharing converter must instead:
 
 This is a required design constraint. A bounded-memory implementation and tests must be completed before the sender UI or upload integration is added.
 
+### 3.5 Exact `.vshare` version 1 binary layout (proposed)
+
+All integer fields use unsigned big-endian/network byte order unless explicitly marked as signed. No padding or implicit alignment is permitted. The parser must enforce the exact field order and exact lengths below; it must not accept unknown fields or alternate encodings.
+
+**Header (all bytes are authenticated as AAD by every chunk and the footer):**
+
+| Field | Size | Required value / rule |
+|---|---:|---|
+| Magic | 8 bytes | ASCII `VSHARE01` |
+| Format version | u16 | `1` |
+| Header length | u32 | Exact total header byte length; maximum 8192 |
+| Flags | u16 | `0` in version 1; reject any other value |
+| Chunk size | u32 | Exactly 1,048,576 bytes (1 MiB) |
+| Plaintext size | u64 | 1..524,288,000 bytes (500 MiB) |
+| Chunk count | u32 | Exactly ceil(plaintext size / chunk size), maximum 500 |
+| Recipient key version | u32 | Positive version from authenticated device-key registration |
+| Recipient public-key fingerprint | 32 bytes | SHA-256 of canonical DER SubjectPublicKeyInfo |
+| Nonce prefix | 8 bytes | Fresh random bytes for this share |
+| Sender UID | u16 + bytes | UTF-8, 1..1024 bytes |
+| Recipient UID | u16 + bytes | UTF-8, 1..1024 bytes |
+| Sender device ID | 36 bytes | Lowercase canonical UUID ASCII |
+| Recipient device ID | 36 bytes | Lowercase canonical UUID ASCII |
+| Assignment ID | 36 bytes | Lowercase canonical UUID ASCII |
+| Share ID | 36 bytes | Lowercase canonical UUID ASCII |
+| Wrapped DEK length | u16 | Exactly 384 for RSA-3072 |
+| Wrapped DEK | 384 bytes | RSA-OAEP-SHA-256 with MGF1-SHA-256 |
+
+The header length must equal the exact sum of these encoded fields. UID strings must be valid UTF-8, non-empty, and compared byte-for-byte with the authenticated expected identities. UUID fields must pass canonical lowercase UUID validation. The key fingerprint and key version must match the recipient device key registered by the trusted server; a package cannot select an arbitrary local key.
+
+**Chunk records (exactly `chunkCount` records):**
+
+| Field | Size | Rule |
+|---|---:|---|
+| Record type | u8 | `0x01` |
+| Chunk index | u32 | Strictly 0, 1, 2, ... in order |
+| Plaintext length | u32 | 1..1,048,576; all non-final chunks exactly 1 MiB |
+| Ciphertext plus GCM tag | plaintext length + 16 | AES-256-GCM output |
+
+Nonce for chunk `i` is the 8-byte header nonce prefix followed by the 4-byte big-endian chunk index. AAD is the fixed ASCII domain separator `VishalSecure.vshare.chunk.v1`, followed by SHA-256 of the exact encoded header bytes, then the 4-byte chunk index and 4-byte plaintext length. The final chunk length must make the sum of all plaintext lengths exactly equal the header plaintext size. The DEK is fresh for every share, so nonce reuse across different shares is not permitted or needed.
+
+**Authenticated terminal record (exactly one, after all chunks):**
+
+| Field | Size | Rule |
+|---|---:|---|
+| Record type | u8 | `0xFF` |
+| Chunk count | u32 | Must equal header chunk count and parsed record count |
+| Total plaintext size | u64 | Must equal header size and sum of authenticated chunk lengths |
+| Footer ciphertext and tag | 28 bytes | AES-256-GCM encryption of ASCII `VSHAREEND1` (10 bytes) + u32 chunk count + u64 total plaintext size |
+
+Footer nonce is the same 8-byte prefix followed by the 4-byte big-endian chunk count; this index is not used by any data chunk. Footer AAD is the fixed ASCII domain separator `VishalSecure.vshare.footer.v1` followed by SHA-256 of the exact encoded header bytes. The parser must require immediate EOF after the footer; trailing bytes are invalid. The footer authenticates even an otherwise empty record sequence, although version 1 disallows zero-length videos.
+
+**Global bounds and rejection rules:**
+- Maximum plaintext size: 500 MiB; maximum chunk count: 500; maximum header size: 8192 bytes.
+- The ciphertext length for each chunk is derived from its validated plaintext length plus the 16-byte GCM tag; never allocate from an unvalidated length.
+- Reject unsupported magic/version, non-zero flags, unexpected header length, invalid UTF-8/UUID, identity or key fingerprint mismatch, wrong chunk size/count, zero or oversized chunk length, wrong record type/index/order, truncated fields, any bad GCM tag, inconsistent byte totals, missing or duplicate footer, and trailing bytes.
+- Check arithmetic for overflow before computing lengths or totals. Do not trust server-provided lengths in place of parsing and authenticating the package.
+- A download is not eligible for local publication or playback until every chunk and the footer authenticate and the exact EOF check succeeds.
+
+**Important implementation note:** this byte layout is a proposed v1 specification, not a claim of tested interoperability. Before implementing it, write independent golden test vectors and parser-negative tests, then validate the Android cryptographic provider behavior. Any change to this layout requires a new format version rather than silently changing version 1.
+
 ## 4. Device replacement and recovery policy — strict device-only access
 
 **User decision: a shared video must work only on the exact recipient phone to which it was sent.**
@@ -76,4 +137,3 @@ Therefore:
 - Owner Device Recovery Code and Backup Recovery Secret do not override this rule and must not restore access to a recipient-bound share.
 
 This is the strict device-binding policy. No server-side key escrow, cross-device key sync, recovery rewrap, or server-side plaintext decryption is allowed.
-
