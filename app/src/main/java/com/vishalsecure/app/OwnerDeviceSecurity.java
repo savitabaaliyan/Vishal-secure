@@ -199,7 +199,13 @@ public final class OwnerDeviceSecurity {
 
     /** Creates a one-time recovery code. Display/store it securely; never log it. */
     public Task<HttpsCallableResult> createRecoveryCode() {
-        return functions.getHttpsCallable("createOwnerRecoveryCode").call(new HashMap<>());
+        return createSensitiveRequestProof("createOwnerRecoveryCode", new HashMap<>())
+                .continueWithTask(task -> {
+                    if (!task.isSuccessful()) throw task.getException();
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("deviceProof", task.getResult());
+                    return functions.getHttpsCallable("createOwnerRecoveryCode").call(data);
+                });
     }
 
     /** Requests a new-phone challenge for recovery when the old phone is unavailable. */
