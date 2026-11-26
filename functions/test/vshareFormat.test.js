@@ -267,8 +267,8 @@ test('vshare multi-chunk vector authenticates both chunks and footer', () => {
   const headerLength = packageBytes.readUInt32BE(10);
   assert.equal(packageBytes.readUInt32BE(28), 2);
   assert.deepEqual(parsePackage(packageBytes, { key: FIXTURE.key }), FIXTURE.plaintext);
-  const secondChunkIndexOffset = headerLength + 9 + FIXTURE.plaintext.length - 17 + 17;
+  const secondChunkIndexOffset = headerLength + 1 + 4 + 4 + CHUNK_SIZE + 16 + 1;
   const reordered = Buffer.from(packageBytes);
   reordered.writeUInt32BE(0, secondChunkIndexOffset);
-  assert.throws(() => parsePackage(reordered, { key: FIXTURE.key }), /order|authenticate/i);
+  assert.throws(() => parsePackage(reordered, { key: FIXTURE.key }), /order/);
 });
