@@ -50,6 +50,19 @@ The package must have a strict versioned binary format, bounded lengths, authent
 - The app must not publish a partial or unauthenticated result. On any failure, delete temporary output and fail closed.
 - Playback integration must be designed so the recipient can play the shared content without changing legacy `.vsec` behavior. A recipient-local re-encryption step using the existing local `.vsec` key is a candidate; it must be tested for atomic file handling and must not leave plaintext on disk.
 
+### 3.4 Legacy `.vsec` source handling — no plaintext staging
+
+The current `CryptoManager.decryptFile()` implementation writes decrypted bytes to an output file while streaming and verifies the GCM tag only at `doFinal()`. It deletes that output on failure, but plaintext may exist temporarily on disk before final authentication. Therefore it must not be called as the sender-side sharing conversion path.
+
+The sharing converter must instead:
+- Read the legacy `.vsec` IV and initialize the existing Keystore AES-GCM decrypt cipher without changing the legacy format or key alias.
+- Feed decrypted bytes from `Cipher.update()` directly in bounded memory buffers into the new `.vshare` encryption cipher; never write plaintext video to a file, cache, MediaStore, or cloud.
+- Stage only encrypted `.vshare` bytes in a private temporary file. Do not make that file eligible for upload until the legacy source `doFinal()` authenticates successfully and the `.vshare` authenticated footer is complete.
+- If either cipher authentication, I/O, or finalization fails, delete the staged encrypted output and clear transient buffers.
+- Add tests proving no plaintext staging file is created, and that a tampered source `.vsec` cannot produce an accepted share.
+
+This is a required design constraint. A bounded-memory implementation and tests must be completed before the sender UI or upload integration is added.
+
 ## 4. Device replacement and recovery policy — strict device-only access
 
 **User decision: a shared video must work only on the exact recipient phone to which it was sent.**
