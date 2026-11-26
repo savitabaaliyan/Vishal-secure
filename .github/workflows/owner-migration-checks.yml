@@ -28,6 +28,13 @@ jobs:
       - name: Check Cloud Functions entry point syntax
         run: node --check functions/index.js
 
+      - name: Check video transfer protocol syntax
+        run: node --check functions/videoTransferProtocol.js
+
+      - name: Run backend protocol unit tests
+        working-directory: functions
+        run: node --test test/*.test.js
+
   android-compile:
     runs-on: ubuntu-latest
     steps:
