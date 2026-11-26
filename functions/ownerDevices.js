@@ -89,6 +89,47 @@ async function consumeRateLimit(uid, action, limit, windowMs) {
   });
 }
 
+
+async function consumeActiveDeviceProof(request, operation, expectedPayload) {
+  const uid = request.auth.uid;
+  const proof = request.data && request.data.deviceProof;
+  if (!proof || typeof proof !== 'object' || Array.isArray(proof)
+      || stableJson(proof.payload) !== stableJson(expectedPayload)) {
+    fail('permission-denied', 'A valid active-device signature is required for this action.');
+  }
+  const deviceId = requiredString(proof.deviceId, 'device proof installation ID', 80);
+  const challengeId = requiredString(proof.challengeId, 'device proof challenge ID', 64);
+  const signature = requiredString(proof.signature, 'device proof signature', 1024);
+  const ownerRef = db.collection('ownerDevices').doc(uid);
+  const challengeRef = db.collection('ownerDeviceChallenges').doc(challengeId);
+  const deviceRef = ownerRef.collection('devices').doc(deviceId);
+  const requestHash = hashProofPayload(expectedPayload);
+
+  await db.runTransaction(async (tx) => {
+    const [ownerSnap, challengeSnap, deviceSnap] = await Promise.all([
+      tx.get(ownerRef), tx.get(challengeRef), tx.get(deviceRef)
+    ]);
+    if (!ownerSnap.exists || !challengeSnap.exists || !deviceSnap.exists
+        || ownerSnap.data().activeDeviceId !== deviceId) {
+      fail('permission-denied', 'This is not the active owner device.');
+    }
+    const challenge = challengeSnap.data();
+    const device = deviceSnap.data();
+    if (device.status !== 'active' || challenge.uid !== uid || challenge.deviceId !== deviceId
+        || challenge.purpose !== 'sensitive-request:' + operation
+        || challenge.operation !== operation || challenge.requestHash !== requestHash
+        || challenge.used || !(challenge.expiresAt instanceof Timestamp)
+        || challenge.expiresAt.toMillis() <= Date.now()) {
+      fail('permission-denied', 'The active-device proof is expired, replayed, or bound to another request.');
+    }
+    if (!verifySignature(device.publicKey, challengeMessage(challenge), signature)) {
+      fail('permission-denied', 'The active-device signature could not be verified.');
+    }
+    tx.update(challengeRef, { used: true, usedAt: FieldValue.serverTimestamp() });
+    tx.update(deviceRef, { lastSeenAt: FieldValue.serverTimestamp() });
+  });
+}
+
 async function createChallenge(uid, deviceId, purpose) {
   await consumeRateLimit(uid, 'challenge-' + purpose, 10, 10 * 60 * 1000);
   const id = crypto.randomUUID();
@@ -262,6 +303,7 @@ exports.completeOwnerDeviceReplacement = onCall(async (request) => {
 
 exports.createOwnerRecoveryCode = onCall(async (request) => {
   await requireOwnerAuth(request);
+  await consumeActiveDeviceProof(request, 'createOwnerRecoveryCode', {});
   await consumeRateLimit(request.auth.uid, 'recovery-code-issue', 3, 24 * 60 * 60 * 1000);
   const uid = request.auth.uid;
   const ownerRef = db.collection('ownerDevices').doc(uid);
@@ -353,7 +395,7 @@ exports.beginOwnerSensitiveRequest = onCall(async (request) => {
   const uid = request.auth.uid;
   const deviceId = requiredString(request.data && request.data.deviceId, 'installation ID', 80);
   const operation = requiredString(request.data && request.data.operation, 'operation', 64);
-  if (!['createVideoAssignment', 'finalizeVideoUpload'].includes(operation)) {
+  if (!['createVideoAssignment', 'finalizeVideoUpload', 'createOwnerRecoveryCode'].includes(operation)) {
     fail('invalid-argument', 'This operation cannot request an owner-device proof.');
   }
   const ownerSnap = await db.collection('ownerDevices').doc(uid).get();
