@@ -193,4 +193,62 @@ public class RecipientEncryptionKeyManagerTest {
         }
     }
 
+
+    @Test
+    public void tamperedFooterNeverPublishesRecipientImportAndDeletesStagingFile() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+        keyStore.load(null);
+        keyStore.deleteEntry(TEST_ALIAS);
+        RecipientEncryptionKeyManager manager = new RecipientEncryptionKeyManager(TEST_ALIAS);
+        byte[] clear = new byte[] {31, 41, 59, 26, 53};
+        byte[] dek = new byte[RecipientEncryptionKeyManager.DEK_LENGTH_BYTES];
+        byte[] wrapped = null;
+        byte[] fingerprint = null;
+        java.io.File dir = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .getTargetContext().getCacheDir();
+        java.io.File encryptedFile = new java.io.File(dir,
+                "vshare-tamper-test-" + UUID.randomUUID() + ".vsec");
+        VShareEncryptedFileSink sink = null;
+        try {
+            new SecureRandom().nextBytes(dek);
+            manager.ensureKeyPair();
+            wrapped = manager.wrapDek(dek);
+            fingerprint = manager.getPublicKeyFingerprint();
+            String senderDevice = "11111111-1111-4111-8111-111111111111";
+            String recipientDevice = "22222222-2222-4222-8222-222222222222";
+            String assignment = "33333333-3333-4333-8333-333333333333";
+            String share = "44444444-4444-4444-8444-444444444444";
+            VShareCodec.Metadata metadata = new VShareCodec.Metadata("sender-uid", "recipient-uid",
+                    senderDevice, recipientDevice, assignment, share,
+                    RecipientEncryptionKeyManager.KEY_VERSION, fingerprint);
+            ByteArrayOutputStream packageBytes = new ByteArrayOutputStream();
+            VShareCodec.write(new ByteArrayInputStream(clear), packageBytes,
+                    clear.length, metadata, dek, wrapped);
+            byte[] tampered = packageBytes.toByteArray();
+            tampered[tampered.length - 1] ^= 0x01;
+
+            sink = new VShareEncryptedFileSink(encryptedFile);
+            java.io.File staged = sink.getStagingFileForTest();
+            assertEquals(false, encryptedFile.exists());
+            try {
+                VShareCodec.readForRecipient(new ByteArrayInputStream(tampered), sink,
+                        "sender-uid", "recipient-uid", senderDevice, recipientDevice,
+                        assignment, share, manager);
+                fail("Tampered footer must be rejected.");
+            } catch (java.security.GeneralSecurityException expected) {
+                // Expected: footer GCM authentication must fail before commit.
+            }
+            assertEquals(false, encryptedFile.exists());
+            assertEquals(false, staged.exists());
+            Arrays.fill(tampered, (byte) 0);
+        } finally {
+            if (sink != null) try { sink.abort(); } catch (Exception ignored) { }
+            encryptedFile.delete();
+            Arrays.fill(dek, (byte) 0);
+            if (wrapped != null) Arrays.fill(wrapped, (byte) 0);
+            if (fingerprint != null) Arrays.fill(fingerprint, (byte) 0);
+            keyStore.deleteEntry(TEST_ALIAS);
+        }
+    }
+
 }
