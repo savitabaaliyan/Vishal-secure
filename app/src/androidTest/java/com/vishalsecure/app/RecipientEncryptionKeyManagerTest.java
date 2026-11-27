@@ -7,6 +7,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.security.KeyStore;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.UUID;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -86,6 +89,55 @@ public class RecipientEncryptionKeyManagerTest {
             byte[] secondFingerprint = manager.getPublicKeyFingerprint();
             assertArrayEquals(firstFingerprint, secondFingerprint);
         } finally {
+            keyStore.deleteEntry(TEST_ALIAS);
+        }
+    }
+
+    @Test
+    public void recipientReaderUnwrapsHeaderDekAndAuthenticatesPackage() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+        keyStore.load(null);
+        keyStore.deleteEntry(TEST_ALIAS);
+        RecipientEncryptionKeyManager manager =
+                new RecipientEncryptionKeyManager(TEST_ALIAS);
+        byte[] clear = new byte[] {11, 22, 33, 44, 55};
+        byte[] dek = new byte[RecipientEncryptionKeyManager.DEK_LENGTH_BYTES];
+        byte[] wrapped = null;
+        byte[] fingerprint = null;
+        try {
+            new SecureRandom().nextBytes(dek);
+            manager.ensureKeyPair();
+            wrapped = manager.wrapDek(dek);
+            fingerprint = manager.getPublicKeyFingerprint();
+            String senderDevice = "11111111-1111-4111-8111-111111111111";
+            String recipientDevice = "22222222-2222-4222-8222-222222222222";
+            String assignment = "33333333-3333-4333-8333-333333333333";
+            String share = "44444444-4444-4444-8444-444444444444";
+            VShareCodec.Metadata metadata = new VShareCodec.Metadata(
+                    "sender-uid", "recipient-uid", senderDevice, recipientDevice,
+                    assignment, share, RecipientEncryptionKeyManager.KEY_VERSION, fingerprint);
+            ByteArrayOutputStream packageBytes = new ByteArrayOutputStream();
+            VShareCodec.write(new ByteArrayInputStream(clear), packageBytes,
+                    clear.length, metadata, dek, wrapped);
+
+            final ByteArrayOutputStream received = new ByteArrayOutputStream();
+            final boolean[] committed = new boolean[1];
+            VShareCodec.readForRecipient(new ByteArrayInputStream(packageBytes.toByteArray()),
+                    new VShareCodec.OutputSink() {
+                        @Override public void writeAuthenticatedChunk(byte[] chunk) {
+                            received.write(chunk, 0, chunk.length);
+                        }
+                        @Override public void commit() { committed[0] = true; }
+                        @Override public void abort() { received.reset(); }
+                    }, "sender-uid", "recipient-uid", senderDevice, recipientDevice,
+                    assignment, share, manager);
+
+            assertArrayEquals(clear, received.toByteArray());
+            assertEquals(true, committed[0]);
+        } finally {
+            Arrays.fill(dek, (byte) 0);
+            if (wrapped != null) Arrays.fill(wrapped, (byte) 0);
+            if (fingerprint != null) Arrays.fill(fingerprint, (byte) 0);
             keyStore.deleteEntry(TEST_ALIAS);
         }
     }
