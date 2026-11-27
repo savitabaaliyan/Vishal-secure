@@ -96,6 +96,11 @@ public class CryptoManager {
      * Android Keystore key is missing, legacy .vsec data is unrecoverable
      * on this installation and the operation must fail closed.
      */
+    /** Package-private access for the authenticated streaming share sender. */
+    static SecretKey getExistingKeyForSharing() throws Exception {
+        return getExistingKey();
+    }
+
     private static SecretKey getExistingKey() throws Exception {
         KeyStore keyStore = KeyStore.getInstance(KEYSTORE_NAME);
         keyStore.load(null);
