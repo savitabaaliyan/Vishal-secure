@@ -7,6 +7,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PushbackInputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.CharacterCodingException;
@@ -165,6 +166,7 @@ public final class VShareCodec {
             System.arraycopy(prefix, 0, header, 0, prefix.length);
             in.readFully(header, prefix.length, header.length - prefix.length);
             ParsedHeader parsed = parseHeader(header);
+            Arrays.fill(parsed.wrappedDek, (byte) 0);
             Metadata m = parsed.metadata;
             requireEqual(m.senderUid, expectedSenderUid, "sender UID");
             requireEqual(m.recipientUid, expectedRecipientUid, "recipient UID");
@@ -238,6 +240,78 @@ public final class VShareCodec {
         }
     }
 
+    /**
+     * Recipient convenience path: parses the bounded header, unwraps its DEK
+     * with this device's non-exportable Keystore key, then streams the package
+     * through the normal authenticated reader. The header is pushed back so
+     * the strict reader validates the exact same bytes again.
+     */
+    public static Metadata readForRecipient(InputStream packageInput, OutputSink sink,
+                                            String expectedSenderUid, String expectedRecipientUid,
+                                            String expectedSenderDeviceId, String expectedRecipientDeviceId,
+                                            String expectedAssignmentId, String expectedShareId,
+                                            RecipientEncryptionKeyManager keyManager) throws Exception {
+        if (packageInput == null || sink == null || keyManager == null) {
+            throw new IllegalArgumentException("Missing input, sink, or recipient key manager.");
+        }
+        PushbackInputStream in = new PushbackInputStream(packageInput, MAX_HEADER_SIZE);
+        byte[] header = null;
+        byte[] wrapped = null;
+        byte[] dek = null;
+        boolean delegatedToReader = false;
+        try {
+            byte[] prefix = new byte[14];
+            new DataInputStream(in).readFully(prefix);
+            ByteBuffer p = ByteBuffer.wrap(prefix).order(ByteOrder.BIG_ENDIAN);
+            byte[] magic = new byte[8]; p.get(magic);
+            int version = p.getShort() & 0xffff;
+            long headerLength = p.getInt() & 0xffffffffL;
+            if (!Arrays.equals(magic, MAGIC) || version != VERSION ||
+                    headerLength < 100 || headerLength > MAX_HEADER_SIZE) {
+                throw new IOException("Invalid recipient .vshare header prefix.");
+            }
+            header = new byte[(int) headerLength];
+            System.arraycopy(prefix, 0, header, 0, prefix.length);
+            new DataInputStream(in).readFully(header, prefix.length, header.length - prefix.length);
+            ParsedHeader parsed = parseHeader(header);
+            Metadata m = parsed.metadata;
+            requireEqual(m.senderUid, expectedSenderUid, "sender UID");
+            requireEqual(m.recipientUid, expectedRecipientUid, "recipient UID");
+            requireEqual(m.senderDeviceId, expectedSenderDeviceId, "sender device");
+            requireEqual(m.recipientDeviceId, expectedRecipientDeviceId, "recipient device");
+            requireEqual(m.assignmentId, expectedAssignmentId, "assignment");
+            requireEqual(m.shareId, expectedShareId, "share");
+            if (m.recipientKeyVersion != RecipientEncryptionKeyManager.KEY_VERSION) {
+                throw new SecurityException("Recipient key version mismatch.");
+            }
+            byte[] localFingerprint = keyManager.getPublicKeyFingerprint();
+            try {
+                if (!MessageDigest.isEqual(m.recipientKeyFingerprint, localFingerprint)) {
+                    throw new SecurityException("This package is not encrypted for this device key.");
+                }
+            } finally {
+                Arrays.fill(localFingerprint, (byte) 0);
+            }
+            wrapped = parsed.wrappedDek;
+            dek = keyManager.unwrapDek(wrapped);
+            in.unread(header);
+            delegatedToReader = true;
+            return read(in, sink, expectedSenderUid, expectedRecipientUid,
+                    expectedSenderDeviceId, expectedRecipientDeviceId,
+                    expectedAssignmentId, expectedShareId,
+                    m.recipientKeyVersion, m.recipientKeyFingerprint, dek);
+        } catch (Exception failure) {
+            if (!delegatedToReader) {
+                try { sink.abort(); } catch (Exception ignored) { }
+            }
+            throw failure;
+        } finally {
+            if (header != null) Arrays.fill(header, (byte) 0);
+            if (wrapped != null) Arrays.fill(wrapped, (byte) 0);
+            if (dek != null) Arrays.fill(dek, (byte) 0);
+        }
+    }
+
     /** Encrypted-at-rest staging contract; implementations must never store clear chunks. */
     public interface OutputSink {
         void writeAuthenticatedChunk(byte[] plaintextChunk) throws Exception;
@@ -296,8 +370,7 @@ public final class VShareCodec {
         }
         Metadata metadata = new Metadata(sender, recipient, senderDevice, recipientDevice,
                 assignment, share, keyVersion, fingerprint);
-        Arrays.fill(wrapped, (byte) 0);
-        return new ParsedHeader(metadata, size, (int) countLong, noncePrefix);
+        return new ParsedHeader(metadata, size, (int) countLong, noncePrefix, wrapped);
     }
 
     private static String readUid(DataInputStream in) throws IOException {
@@ -389,9 +462,10 @@ public final class VShareCodec {
         final long plaintextSize;
         final int chunkCount;
         final byte[] noncePrefix;
-        ParsedHeader(Metadata metadata, long size, int count, byte[] prefix) {
+        final byte[] wrappedDek;
+        ParsedHeader(Metadata metadata, long size, int count, byte[] prefix, byte[] wrappedDek) {
             this.metadata = metadata; this.plaintextSize = size;
-            this.chunkCount = count; this.noncePrefix = prefix;
+            this.chunkCount = count; this.noncePrefix = prefix; this.wrappedDek = wrappedDek;
         }
     }
 }
