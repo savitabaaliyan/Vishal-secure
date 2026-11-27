@@ -91,10 +91,10 @@ public final class VShareSender {
             // Both files are in the same directory/filesystem.
             Os.link(staging.getAbsolutePath(), destination.getAbsolutePath());
             published = true;
-            Os.unlink(staging.getAbsolutePath());
+            if (!staging.delete()) throw new IOException("Could not remove encrypted staging link.");
         } catch (Exception failure) {
             if (published) {
-                try { Os.unlink(destination.getAbsolutePath()); } catch (Exception ignored) { }
+                try { destination.delete(); } catch (Exception ignored) { }
             }
             throw failure;
         } finally {
