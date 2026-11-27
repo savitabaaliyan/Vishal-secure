@@ -109,6 +109,17 @@ public class CryptoManager {
         return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
     }
 
+    /** Creates a fresh local .vsec-compatible encryption cipher for an authenticated import. */
+    static Cipher createLocalEncryptionCipher() throws Exception {
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
+        byte[] iv = cipher.getIV();
+        if (iv == null || iv.length != IV_LENGTH) throw new IllegalStateException("Invalid local encryption IV.");
+        return cipher;
+    }
+
+    static int getLocalIvLength() { return IV_LENGTH; }
+
     public static boolean encryptFile(
             File inputFile,
             File outputFile
