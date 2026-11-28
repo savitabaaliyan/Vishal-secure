@@ -102,4 +102,4 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: gradle connectedDebugAndroidTest
+          script: gradle connectedDebugAndroidTest --stacktrace
