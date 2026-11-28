@@ -65,6 +65,7 @@ public class VShareSenderInstrumentedTest {
         String id = UUID.randomUUID().toString();
         File clearFile = new File(dir, "vshare-sender-clear-" + id + ".synthetic");
         File sourceVsec = new File(dir, "vshare-sender-source-" + id + ".vsec");
+        File diagnosticPlain = new File(dir, "vshare-sender-diagnostic-" + id + ".synthetic");
         File destination = new File(dir, "vshare-sender-destination-" + id + ".vshare");
         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
         keyStore.load(null);
@@ -81,6 +82,19 @@ public class VShareSenderInstrumentedTest {
             writeAll(clearFile, clear);
             assertTrue("Synthetic source must encrypt to legacy .vsec",
                     CryptoManager.encryptFile(clearFile, sourceVsec));
+
+            // Independent baseline: verify the same .vsec with the existing
+            // non-streaming decrypt path before exercising the new sender.
+            assertTrue("Baseline CryptoManager .vsec decryption must succeed",
+                    CryptoManager.decryptFile(sourceVsec, diagnosticPlain));
+            byte[] diagnosticBytes = readAll(diagnosticPlain);
+            try {
+                assertArrayEquals("Baseline .vsec decryption must reproduce synthetic bytes",
+                        clear, diagnosticBytes);
+            } finally {
+                Arrays.fill(diagnosticBytes, (byte) 0);
+                diagnosticPlain.delete();
+            }
             assertTrue("Plaintext fixture cleanup", clearFile.delete());
 
             recipient.ensureKeyPair();
@@ -115,6 +129,7 @@ public class VShareSenderInstrumentedTest {
             if (recovered != null) Arrays.fill(recovered, (byte) 0);
             if (fingerprint != null) Arrays.fill(fingerprint, (byte) 0);
             clearFile.delete();
+            diagnosticPlain.delete();
             sourceVsec.delete();
             destination.delete();
             keyStore.deleteEntry(TEST_ALIAS);
