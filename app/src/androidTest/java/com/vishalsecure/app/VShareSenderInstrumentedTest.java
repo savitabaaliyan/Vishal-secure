@@ -42,6 +42,40 @@ public class VShareSenderInstrumentedTest {
         return bytes;
     }
 
+    /** Diagnostic-only direct GCM check; reports exception class/message, never key or data. */
+    private static void assertDirectLegacyVsecDecrypts(File encryptedFile, byte[] expected)
+            throws Exception {
+        byte[] encoded = readAll(encryptedFile);
+        byte[] iv = null;
+        byte[] ciphertextAndTag = null;
+        byte[] plaintext = null;
+        try {
+            if (encoded.length <= CryptoManager.getLocalIvLength() + 16) {
+                fail("Direct .vsec diagnostic: encrypted fixture is too short.");
+            }
+            iv = Arrays.copyOfRange(encoded, 0, CryptoManager.getLocalIvLength());
+            ciphertextAndTag = Arrays.copyOfRange(
+                    encoded, CryptoManager.getLocalIvLength(), encoded.length);
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE,
+                    CryptoManager.getExistingKeyForSharing(),
+                    new javax.crypto.spec.GCMParameterSpec(128, iv));
+            plaintext = cipher.doFinal(ciphertextAndTag);
+            assertArrayEquals("Direct .vsec GCM diagnostic must reproduce synthetic bytes",
+                    expected, plaintext);
+        } catch (Exception error) {
+            String detail = error.getClass().getName();
+            String message = error.getMessage();
+            if (message != null && !message.isEmpty()) detail += ": " + message;
+            fail("Direct .vsec GCM diagnostic failed (" + detail + ").");
+        } finally {
+            Arrays.fill(encoded, (byte) 0);
+            if (iv != null) Arrays.fill(iv, (byte) 0);
+            if (ciphertextAndTag != null) Arrays.fill(ciphertextAndTag, (byte) 0);
+            if (plaintext != null) Arrays.fill(plaintext, (byte) 0);
+        }
+    }
+
     private static void writeAll(File file, byte[] bytes) throws Exception {
         try (FileOutputStream out = new FileOutputStream(file)) {
             out.write(bytes);
@@ -83,8 +117,11 @@ public class VShareSenderInstrumentedTest {
             assertTrue("Synthetic source must encrypt to legacy .vsec",
                     CryptoManager.encryptFile(clearFile, sourceVsec));
 
-            // Independent baseline: verify the same .vsec with the existing
-            // non-streaming decrypt path before exercising the new sender.
+            // First isolate the Android Keystore/GCM operation using a full-buffer
+            // read. The diagnostic reports only exception class/message, never secrets.
+            assertDirectLegacyVsecDecrypts(sourceVsec, clear);
+
+            // Then verify the existing non-streaming file decrypt path.
             assertTrue("Baseline CryptoManager .vsec decryption must succeed",
                     CryptoManager.decryptFile(sourceVsec, diagnosticPlain));
             byte[] diagnosticBytes = readAll(diagnosticPlain);
