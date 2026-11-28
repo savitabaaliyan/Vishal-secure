@@ -182,7 +182,15 @@ public final class VShareSender {
                         throw new IOException("Source .vsec plaintext length mismatch.");
                     }
                 } catch (Exception authenticationFailure) {
-                    throw new IOException("Source .vsec authentication failed.", authenticationFailure);
+                    // Keep diagnostics limited to the provider exception type/message;
+                    // never log key material, IVs, ciphertext, or plaintext.
+                    String causeType = authenticationFailure.getClass().getSimpleName();
+                    String causeMessage = authenticationFailure.getMessage();
+                    String detail = causeMessage == null || causeMessage.isEmpty()
+                            ? causeType : causeType + ": " + causeMessage;
+                    throw new IOException(
+                            "Source .vsec authentication failed (" + detail + ").",
+                            authenticationFailure);
                 }
             } finally {
                 Arrays.fill(encrypted, (byte) 0);
