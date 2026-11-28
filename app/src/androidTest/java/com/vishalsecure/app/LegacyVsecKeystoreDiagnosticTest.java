@@ -66,7 +66,16 @@ public class LegacyVsecKeystoreDiagnosticTest {
     }
 
     @Test
-    public void androidKeystoreSameCipherAndRetrievedKeyAreCompared() throws Exception {
+    public void androidKeystoreSameKeyObjectDecryptsItsOwnCiphertext() throws Exception {
+        runAndroidKeystoreRoundTrip(false);
+    }
+
+    @Test
+    public void androidKeystoreReloadedKeyDecryptsItsOwnCiphertext() throws Exception {
+        runAndroidKeystoreRoundTrip(true);
+    }
+
+    private void runAndroidKeystoreRoundTrip(boolean reloadKey) throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore");
         store.load(null);
         store.deleteEntry(TEST_ALIAS);
@@ -92,25 +101,20 @@ public class LegacyVsecKeystoreDiagnosticTest {
             assertEquals(12, iv.length);
             encrypted = encrypt(enc, clear);
 
-            Cipher sameObjectDecrypt = Cipher.getInstance("AES/GCM/NoPadding");
-            sameObjectDecrypt.init(Cipher.DECRYPT_MODE, generated,
-                    new GCMParameterSpec(128, iv));
-            byte[] sameObjectPlain = sameObjectDecrypt.doFinal(encrypted);
-            try {
-                assertArrayEquals("Same key object must decrypt its own GCM ciphertext",
-                        clear, sameObjectPlain);
-            } finally {
-                Arrays.fill(sameObjectPlain, (byte) 0);
+            SecretKey decryptKey = generated;
+            if (reloadKey) {
+                KeyStore.Entry entry = store.getEntry(TEST_ALIAS, null);
+                assertNotNull(entry);
+                decryptKey = ((KeyStore.SecretKeyEntry) entry).getSecretKey();
             }
 
-            KeyStore.Entry entry = store.getEntry(TEST_ALIAS, null);
-            assertNotNull(entry);
-            SecretKey retrieved = ((KeyStore.SecretKeyEntry) entry).getSecretKey();
-            Cipher retrievedDecrypt = Cipher.getInstance("AES/GCM/NoPadding");
-            retrievedDecrypt.init(Cipher.DECRYPT_MODE, retrieved,
+            Cipher decrypt = Cipher.getInstance("AES/GCM/NoPadding");
+            decrypt.init(Cipher.DECRYPT_MODE, decryptKey,
                     new GCMParameterSpec(128, iv));
-            recovered = retrievedDecrypt.doFinal(encrypted);
-            assertArrayEquals("Reloaded Keystore key must decrypt its own GCM ciphertext",
+            recovered = decrypt.doFinal(encrypted);
+            assertArrayEquals(reloadKey
+                            ? "Reloaded Keystore key must decrypt its own GCM ciphertext"
+                            : "Same key object must decrypt its own GCM ciphertext",
                     clear, recovered);
         } finally {
             Arrays.fill(clear, (byte) 0);
